@@ -6,6 +6,9 @@ import DashboardHome from './components/Dashboard/Home';
 import MasterBarang from './components/Inventory/MasterBarang';
 import TakeItemHistory from './components/Inventory/TakeItemHistory';
 import LogItemChange from './components/Inventory/LogItemChange';
+import StockOutHistory from './components/Inventory/StockOutHistory';
+import LoginSettings from './components/Admin/LoginSettings';
+import ManageUsers from './components/Admin/ManageUsers';
 import { Loader2 } from 'lucide-react';
 import { ToastProvider } from './components/UI/Toast';
 
@@ -31,9 +34,12 @@ export default function App() {
       ) : (
         <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
           {activeTab === 'dashboard' && <DashboardHome />}
-          {activeTab === 'barang' && <MasterBarang />}
+          {activeTab === 'barang' && <MasterBarang setActiveTab={setActiveTab} />}
           {activeTab === 'take-item-history' && <TakeItemHistory />}
           {activeTab === 'log-item-change' && <LogItemChange />}
+          {activeTab === 'stock-out-history' && <StockOutHistory />}
+          {activeTab === 'login-settings' && <LoginSettings />}
+          {activeTab === 'manage-users' && <ManageUsers />}
         </Layout>
       )}
     </ToastProvider>

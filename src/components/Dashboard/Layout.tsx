@@ -4,7 +4,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useSettings } from '../../hooks/useSettings';
 import { 
   LayoutDashboard, Package, MapPin, LogOut, Menu, X, 
-  Bell, User as UserIcon, ChevronRight, History, ClipboardList
+  Bell, User as UserIcon, ChevronRight, History, ClipboardList, Archive,
+  Settings, Users
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -29,6 +30,11 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
     { id: 'barang', label: 'Master Barang', icon: <Package size={20} /> },
     { id: 'take-item-history', label: 'Take Item History', icon: <History size={20} /> },
     { id: 'log-item-change', label: 'Log Item Change', icon: <ClipboardList size={20} /> },
+    { id: 'stock-out-history', label: 'Riwayat Stock Keluar', icon: <Archive size={20} /> },
+    { id: 'manage-users', label: 'Manage User', icon: <Users size={20} /> },
+    ...(profile?.role === 'admin' ? [
+      { id: 'login-settings', label: 'Pengaturan Login', icon: <Settings size={20} /> }
+    ] : []),
   ];
 
   const handleLogout = async () => {
@@ -54,9 +60,9 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
           {/* Sidebar Header */}
           <div className="p-6 flex items-center space-x-3 border-b border-white/10">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-xl">
-              {settings.app_title.charAt(0)}
+              {settings.login_title.charAt(0)}
             </div>
-            <span className="font-bold text-lg truncate">{settings.app_title}</span>
+            <span className="font-bold text-lg truncate">{settings.login_title}</span>
           </div>
 
           {/* Navigation */}

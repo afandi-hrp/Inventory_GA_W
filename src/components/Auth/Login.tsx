@@ -34,13 +34,13 @@ export default function Login() {
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Left Side: Background Image */}
       <div 
-        className="hidden md:block md:w-1/2 bg-cover bg-center relative"
-        style={{ backgroundImage: `url(${settings.login_bg_url})` }}
+        className="hidden md:block md:w-1/2 bg-cover bg-center relative transition-all duration-500"
+        style={{ backgroundImage: `url(${settings.login_bg_url})`, backgroundSize: 'cover' }}
       >
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-12">
           <div className="text-white max-w-md">
-            <h1 className="text-5xl font-bold mb-4">{settings.app_title}</h1>
-            <p className="text-xl opacity-90">{settings.footer_text}</p>
+            <h1 className="text-5xl font-bold mb-4">{settings.login_title}</h1>
+            <p className="text-xl opacity-90">{settings.login_footer}</p>
           </div>
         </div>
       </div>
@@ -49,13 +49,9 @@ export default function Login() {
       <div className="flex-1 flex flex-col justify-center items-center p-8 bg-gray-50">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <div className="flex flex-col items-center mb-8">
-            {settings.app_logo_url ? (
-              <img src={settings.app_logo_url} alt="Logo" className="h-16 mb-4" />
-            ) : (
-              <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mb-4 text-white">
-                <LogIn size={32} />
-              </div>
-            )}
+            <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mb-4 text-white">
+              <LogIn size={32} />
+            </div>
             <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
             <p className="text-gray-500">Please enter your details</p>
           </div>
@@ -134,8 +130,7 @@ export default function Login() {
         </div>
 
         <div className="mt-8 text-center text-gray-500 text-sm">
-          <p>{settings.footer_text}</p>
-          <p className="mt-1">{settings.copyright_text}</p>
+          <p>{settings.login_footer}</p>
         </div>
       </div>
     </div>

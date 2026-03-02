@@ -56,6 +56,13 @@ export function useAuth() {
           throw error;
         }
       } else {
+        if (data && !data.is_active) {
+          // User is disabled, sign them out
+          await supabase.auth.signOut();
+          setProfile(null);
+          setUser(null);
+          return;
+        }
         setProfile(data);
       }
     } catch (err) {

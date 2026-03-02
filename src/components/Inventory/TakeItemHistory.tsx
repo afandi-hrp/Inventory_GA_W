@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { Loader2, History, Package, User as UserIcon, Calendar, ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Loader2, History, Package, User as UserIcon, Calendar, ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X, Search, Filter, XCircle } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -20,6 +20,7 @@ interface TakeItemHistoryEntry {
   items: { // Joined item details
     kode_barang: string;
     nama_barang: string;
+    lokasi: string;
   };
   profiles: { // Joined user details
     full_name: string;
@@ -37,6 +38,11 @@ export default function TakeItemHistory() {
   const [sortColumn, setSortColumn] = useState<'created_at' | 'nama_barang' | 'jumlah' | null>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Search and Filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   // Modal state for viewing detailed history
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHistoryEntryForDetail, setSelectedHistoryEntryForDetail] = useState<TakeItemHistoryEntry | null>(null);
@@ -50,7 +56,19 @@ export default function TakeItemHistory() {
 
       let query = supabase
         .from('take_item_history')
-        .select('*, items(kode_barang, nama_barang), profiles(full_name)', { count: 'exact' });
+        .select(`*, items${searchTerm ? '!inner' : ''}(kode_barang, nama_barang, lokasi), profiles(full_name)`, { count: 'exact' });
+
+      if (searchTerm) {
+        query = query.or(`nama_barang.ilike.%${searchTerm}%,kode_barang.ilike.%${searchTerm}%,lokasi.ilike.%${searchTerm}%`, { foreignTable: 'items' });
+      }
+
+      if (startDate) {
+        query = query.gte('created_at', `${startDate}T00:00:00`);
+      }
+
+      if (endDate) {
+        query = query.lte('created_at', `${endDate}T23:59:59`);
+      }
 
       if (sortColumn) {
         const column = sortColumn === 'nama_barang' ? 'items.nama_barang' : sortColumn;
@@ -73,7 +91,7 @@ export default function TakeItemHistory() {
 
   useEffect(() => {
     fetchHistory();
-  }, [page, itemsPerPage, sortColumn, sortDirection]);
+  }, [page, itemsPerPage, sortColumn, sortDirection, searchTerm, startDate, endDate]);
 
   const handleSort = (column: 'created_at' | 'nama_barang' | 'jumlah') => {
     if (sortColumn === column) {
@@ -87,6 +105,13 @@ export default function TakeItemHistory() {
   const handleOpenDetailModal = (entry: TakeItemHistoryEntry) => {
     setSelectedHistoryEntryForDetail(entry);
     setIsDetailModalOpen(true);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setStartDate('');
+    setEndDate('');
+    setPage(1);
   };
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -104,6 +129,47 @@ export default function TakeItemHistory() {
           <p>{error}</p>
         </div>
       )}
+
+      {/* Advanced Search & Filters */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-grow">
+            <input
+              type="text"
+              placeholder="Cari berdasarkan nama, kode barang, atau lokasi..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <div className="flex items-center space-x-2">
+              <Calendar size={18} className="text-gray-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <button
+              onClick={handleClearSearch}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <XCircle size={18} />
+              <span>Reset</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-100">
         <table className="min-w-full divide-y divide-gray-50">
@@ -277,6 +343,10 @@ export default function TakeItemHistory() {
               <div>
                 <p className="font-medium text-gray-700">Kode Barang:</p>
                 <p className="text-gray-900">{selectedHistoryEntryForDetail.items.kode_barang}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">Lokasi:</p>
+                <p className="text-gray-900">{selectedHistoryEntryForDetail.items.lokasi || '-'}</p>
               </div>
               <div>
                 <p className="font-medium text-gray-700">Jumlah:</p>

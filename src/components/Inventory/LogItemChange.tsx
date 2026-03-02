@@ -39,7 +39,8 @@ export default function LogItemChange() {
 
   // Search and Filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [actionFilter, setActionFilter] = useState<'ALL' | 'UPDATE' | 'DELETE'>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Modal state for viewing detailed changes
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -54,19 +55,22 @@ export default function LogItemChange() {
 
       let query = supabase
         .from('item_audit_logs')
-        .select('*, profiles(full_name), items(kode_barang, nama_barang, lokasi)', { count: 'exact' });
+        .select(`*, profiles(full_name), items${searchTerm ? '!inner' : ''}(kode_barang, nama_barang, lokasi)`, { count: 'exact' });
 
       if (searchTerm) {
-        query = query
-          .or(`items.nama_barang.ilike.%${searchTerm}%`)
-          .or(`items.kode_barang.ilike.%${searchTerm}%`)
-          .or(`items.lokasi.ilike.%${searchTerm}%`)
-          .or(`profiles.full_name.ilike.%${searchTerm}%`);
+        query = query.or(`nama_barang.ilike.%${searchTerm}%,kode_barang.ilike.%${searchTerm}%,lokasi.ilike.%${searchTerm}%`, { foreignTable: 'items' });
       }
 
-      if (actionFilter !== 'ALL') {
-        query = query.eq('action', actionFilter);
+      if (startDate) {
+        query = query.gte('created_at', `${startDate}T00:00:00`);
       }
+
+      if (endDate) {
+        query = query.lte('created_at', `${endDate}T23:59:59`);
+      }
+
+      // Always exclude DELETE actions as requested
+      query = query.neq('action', 'DELETE');
 
       if (sortColumn) {
         const column = sortColumn === 'changed_by' ? 'profiles.full_name' : sortColumn === 'kode_barang' ? 'items.kode_barang' : sortColumn;
@@ -89,7 +93,7 @@ export default function LogItemChange() {
 
   useEffect(() => {
     fetchAuditLogs();
-  }, [page, itemsPerPage, sortColumn, sortDirection, searchTerm, actionFilter]);
+  }, [page, itemsPerPage, sortColumn, sortDirection, searchTerm, startDate, endDate]);
 
   const handleSort = (column: 'created_at' | 'action' | 'changed_by' | 'kode_barang') => {
     if (sortColumn === column) {
@@ -107,76 +111,103 @@ export default function LogItemChange() {
 
   const handleClearSearch = () => {
     setSearchTerm('');
-    setActionFilter('ALL');
+    setStartDate('');
+    setEndDate('');
     setPage(1);
   };
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   const renderChanges = (oldValues: Record<string, any> | null, newValues: Record<string, any> | null) => {
-    if (!oldValues && !newValues) return null;
-
     const relevantKeys = [
-      'kode_barang', 'nama_barang', 'jumlah', 'lokasi', 'deskripsi', 'created_at', 'foto_urls'
+      'kode_barang', 'nama_barang', 'jumlah_barang', 'lokasi', 'deskripsi', 'foto_urls'
     ];
 
     const displayNames: Record<string, string> = {
       'kode_barang': 'Kode Barang',
       'nama_barang': 'Nama Barang',
-      'jumlah': 'Jumlah Barang',
+      'jumlah_barang': 'Jumlah Barang',
       'lokasi': 'Lokasi',
       'deskripsi': 'Deskripsi',
-      'created_at': 'Tanggal',
-      'foto_urls': 'Foto URL'
+      'foto_urls': 'Foto'
     };
 
-    const allKeys = Array.from(new Set([
-      ...(oldValues ? Object.keys(oldValues) : []),
-      ...(newValues ? Object.keys(newValues) : []),
-    ])).filter(key => relevantKeys.includes(key));
-
     const formatValue = (key: string, value: any) => {
-      if (value === undefined || value === null) return '[N/A]';
-      if (key === 'created_at') {
-        return new Date(value).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      } else if (key === 'foto_urls' && Array.isArray(value) && value.length > 0) {
+      if (value === undefined || value === null || value === '') return '-';
+      
+      if (key === 'foto_urls' && Array.isArray(value) && value.length > 0) {
         return (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1 mt-1">
             {value.map((url: string, index: number) => (
-              <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                <img src={url} alt={`Foto ${index + 1}`} className="w-16 h-16 object-cover rounded-md" referrerPolicy="no-referrer" />
-              </a>
+              <img 
+                key={index} 
+                src={url} 
+                alt={`Foto ${index + 1}`} 
+                className="w-10 h-10 object-cover rounded border border-gray-200 shadow-sm" 
+                referrerPolicy="no-referrer" 
+              />
             ))}
           </div>
         );
       }
+
+      if (key === 'lokasi') {
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
+            {String(value)}
+          </span>
+        );
+      }
+
+      if (key === 'nama_barang') {
+        return <span className="font-mono text-xs">{String(value)}</span>;
+      }
+
       return String(value);
     };
 
     return (
-      <div className="space-y-1 text-xs">
-        {allKeys.map(key => {
-          const oldValue = oldValues ? oldValues[key] : undefined;
-          const newValue = newValues ? newValues[key] : undefined;
-          const displayName = displayNames[key] || key;
+      <div className="overflow-hidden border border-gray-100 rounded-xl">
+        <table className="w-full text-sm text-left">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="px-4 py-3 font-semibold text-gray-600 w-1/4">Field</th>
+              <th className="px-4 py-3 font-semibold text-gray-600 w-3/8">Lama</th>
+              <th className="px-4 py-3 font-semibold text-gray-600 w-3/8">Baru</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {relevantKeys.map(key => {
+              const oldValue = oldValues ? oldValues[key] : null;
+              const newValue = newValues ? newValues[key] : null;
+              const isChanged = JSON.stringify(oldValue) !== JSON.stringify(newValue);
+              const displayName = displayNames[key] || key;
 
-          if (oldValue === newValue) {
-            return (
-              <div key={key} className="flex justify-between items-center">
-                <span className="font-medium text-gray-600">{displayName}:</span>
-                <span className="text-gray-500">{formatValue(key, newValue)}</span>
-              </div>
-            );
-          } else {
-            return (
-              <div key={key} className="flex justify-between items-center text-sm">
-                <span className="font-medium text-gray-800">{displayName}:</span>
-                <span className="text-red-600 line-through mr-2">{formatValue(key, oldValue)}</span>
-                <span className="text-green-600">{formatValue(key, newValue)}</span>
-              </div>
-            );
-          }
-        })}
+              return (
+                <tr key={key} className={cn(
+                  "transition-colors",
+                  isChanged ? "bg-emerald-50/30" : "bg-white"
+                )}>
+                  <td className="px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wider">
+                    {displayName}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-3",
+                    isChanged ? "text-gray-900 font-semibold" : "text-gray-400"
+                  )}>
+                    {formatValue(key, oldValue)}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-3",
+                    isChanged ? "text-emerald-700 font-bold" : "text-gray-400"
+                  )}>
+                    {formatValue(key, newValue)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -212,34 +243,43 @@ export default function LogItemChange() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
-        <div className="relative flex-grow">
-          <input
-            type="text"
-            placeholder="Cari berdasarkan nama, kode barang, atau lokasi..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        </div>
-        <div className="flex items-center gap-4">
-          <select
-            className="block w-full sm:w-auto pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value as 'ALL' | 'UPDATE' | 'DELETE')}
-          >
-            <option value="ALL">Semua Aksi</option>
-            <option value="UPDATE">UPDATE</option>
-            <option value="DELETE">DELETE</option>
-          </select>
-          <button
-            onClick={handleClearSearch}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <XCircle size={20} />
-            <span>Clear</span>
-          </button>
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-grow">
+            <input
+              type="text"
+              placeholder="Cari berdasarkan nama, kode barang, atau lokasi..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <div className="flex items-center space-x-2">
+              <Calendar size={18} className="text-gray-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <button
+              onClick={handleClearSearch}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <XCircle size={18} />
+              <span>Reset</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -269,6 +309,9 @@ export default function LogItemChange() {
                   {sortColumn !== 'action' && <ArrowUpDown size={16} className="text-gray-300" />}
                 </div>
               </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Nama Barang
+              </th>
               <th 
                 scope="col" 
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -297,14 +340,14 @@ export default function LogItemChange() {
           <tbody className="divide-y divide-gray-50">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                   <p className="text-gray-500">Memuat log audit...</p>
                 </td>
               </tr>
             ) : auditLogs.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   <ClipboardList size={48} className="mx-auto text-gray-300 mb-2" />
                   <p className="text-gray-500">Tidak ada log perubahan item.</p>
                 </td>
@@ -323,8 +366,11 @@ export default function LogItemChange() {
                       {entry.action}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {entry.items?.nama_barang || entry.old_values?.nama_barang || 'Item Deleted'}
+                  </td>
                   <td className="px-6 py-4 text-sm font-mono text-gray-700 max-w-[150px] truncate">
-                    {entry.items?.kode_barang || entry.item_id}
+                    {entry.items?.kode_barang || entry.old_values?.kode_barang || entry.item_id}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-700">
                     <span className="text-blue-600 hover:underline">
@@ -413,38 +459,57 @@ export default function LogItemChange() {
               </button>
             </div>
             <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="font-medium text-gray-700">Tanggal:</p>
-                  <p className="text-gray-900">{new Date(selectedLogEntryForDetail.created_at).toLocaleString('id-ID')}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <Calendar size={18} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Waktu Perubahan</p>
+                    <p className="text-sm font-medium text-gray-900">{new Date(selectedLogEntryForDetail.created_at).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-700">Aksi:</p>
-                  <p className="text-gray-900">{selectedLogEntryForDetail.action}</p>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <UserIcon size={18} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Diubah Oleh</p>
+                    <p className="text-sm font-medium text-gray-900">{selectedLogEntryForDetail.profiles?.full_name || 'Unknown User'}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-700">Kode Barang:</p>
-                  <p className="text-gray-900">{selectedLogEntryForDetail.items?.kode_barang || selectedLogEntryForDetail.item_id}</p>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <Package size={18} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Kode Barang</p>
+                    <p className="text-sm font-mono font-medium text-gray-900">{selectedLogEntryForDetail.items?.kode_barang || selectedLogEntryForDetail.item_id}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-700">Diubah Oleh:</p>
-                  <p className="text-gray-900">{selectedLogEntryForDetail.profiles?.full_name || 'Unknown User'}</p>
+                <div className="flex items-center space-x-3">
+                  <div className={cn(
+                    "p-2 rounded-lg shadow-sm",
+                    selectedLogEntryForDetail.action === 'UPDATE' ? "bg-blue-50 text-blue-600" : "bg-red-50 text-red-600"
+                  )}>
+                    <ClipboardList size={18} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tipe Aksi</p>
+                    <p className={cn(
+                      "text-sm font-bold",
+                      selectedLogEntryForDetail.action === 'UPDATE' ? "text-blue-600" : "text-red-600"
+                    )}>{selectedLogEntryForDetail.action}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-bold text-gray-800 mb-2">Old Values</h4>
-                  <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-                    {renderChanges(selectedLogEntryForDetail.old_values, null)}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-800 mb-2">New Values</h4>
-                  <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-                    {renderChanges(null, selectedLogEntryForDetail.new_values)}
-                  </div>
-                </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center">
+                  <ArrowUpDown size={14} className="mr-2" />
+                  Perbandingan Nilai
+                </h4>
+                {renderChanges(selectedLogEntryForDetail.old_values, selectedLogEntryForDetail.new_values)}
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">

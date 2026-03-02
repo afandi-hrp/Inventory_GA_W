@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { 
-  Plus, Search, Filter, Edit2, Trash2, ChevronLeft, ChevronRight, 
+  Plus, Search, Filter, Edit2, ChevronLeft, ChevronRight, 
   Package, Image as ImageIcon, Upload, X, Loader2, AlertCircle,
   FileSpreadsheet, CheckSquare, Square, MoreHorizontal,
   ArrowUpDown, ChevronUp, ChevronDown, Info, Calendar, MapPin, Hash,
-  LogOut, History, ClipboardList
+  LogOut, History, ClipboardList, Archive
 } from 'lucide-react';
 import { Item } from '../../types';
 import { clsx, type ClassValue } from 'clsx';
@@ -18,7 +18,11 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function MasterBarang() {
+interface MasterBarangProps {
+  setActiveTab?: (tab: string) => void;
+}
+
+export default function MasterBarang({ setActiveTab }: MasterBarangProps) {
   const { profile } = useAuth();
   const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
@@ -38,8 +42,11 @@ export default function MasterBarang() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isTakeItemModalOpen, setIsTakeItemModalOpen] = useState(false);
+  const [isStockOutModalOpen, setIsStockOutModalOpen] = useState(false);
+  const [isBulkStockOutModalOpen, setIsBulkStockOutModalOpen] = useState(false);
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<Item | null>(null);
   const [selectedItemForTake, setSelectedItemForTake] = useState<Item | null>(null);
+  const [selectedItemForStockOut, setSelectedItemForStockOut] = useState<Item | null>(null);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
   const [carouselImages, setCarouselImages] = useState<string[]>([]);
@@ -49,11 +56,6 @@ export default function MasterBarang() {
   const [formError, setFormError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importPreviewData, setImportPreviewData] = useState<any[]>([]);
-
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<Item | null>(null);
-  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -67,6 +69,10 @@ export default function MasterBarang() {
 
   const [takeItemData, setTakeItemData] = useState({
     jumlah: 1,
+    alasan: '',
+  });
+
+  const [stockOutData, setStockOutData] = useState({
     alasan: '',
   });
 
@@ -170,6 +176,12 @@ export default function MasterBarang() {
     setIsTakeItemModalOpen(true);
   };
 
+  const handleStockOut = (item: Item) => {
+    setSelectedItemForStockOut(item);
+    setStockOutData({ alasan: '' });
+    setIsStockOutModalOpen(true);
+  };
+
   const confirmTakeItem = async () => {
     if (!selectedItemForTake) return;
     if (takeItemData.jumlah <= 0) {
@@ -216,7 +228,63 @@ export default function MasterBarang() {
     }
   };
 
+  const confirmStockOut = async () => {
+    if (!selectedItemForStockOut) return;
+    if (!stockOutData.alasan.trim()) {
+      showToast('Alasan harus diisi', 'error');
+      return;
+    }
+
+    setFormLoading(true);
+    try {
+      // 1. Copy to history
+      const { error: insertError } = await supabase
+        .from('stock_keluar_history')
+        .insert([{
+          original_item_id: selectedItemForStockOut.id,
+          kode_barang: selectedItemForStockOut.kode_barang,
+          nama_barang: selectedItemForStockOut.nama_barang,
+          jumlah_barang: selectedItemForStockOut.jumlah_barang,
+          lokasi: selectedItemForStockOut.lokasi,
+          foto_urls: selectedItemForStockOut.foto_urls,
+          deskripsi: selectedItemForStockOut.deskripsi,
+          created_at: selectedItemForStockOut.created_at,
+          updated_at: selectedItemForStockOut.updated_at,
+          keterangan_alasan: stockOutData.alasan,
+          user_name: profile?.full_name || profile?.email,
+          tanggal_keluar: new Date().toISOString()
+        }]);
+
+      if (insertError) throw insertError;
+
+      // 2. Delete from items
+      const { error: deleteError } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', selectedItemForStockOut.id);
+
+      if (deleteError) throw deleteError;
+
+      showToast('Barang berhasil dipindahkan ke riwayat keluar', 'success');
+      setIsStockOutModalOpen(false);
+      setSelectedItemForStockOut(null);
+      if (setActiveTab) {
+        setActiveTab('stock-out-history');
+      } else {
+        fetchItems();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Gagal mengeluarkan barang', 'error');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   const handleOpenModal = (item?: Item) => {
+    if (profile?.role !== 'admin') {
+      showToast('Akses Ditolak: Anda tidak memiliki izin untuk melakukan aksi ini', 'error');
+      return;
+    }
     if (item) {
       setEditingItem(item);
       setFormData({
@@ -298,31 +366,6 @@ export default function MasterBarang() {
       showToast(err.message || 'Gagal mengimport data', 'error');
     } finally {
       setImportLoading(false);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!selectedItems.length) return;
-    setIsBulkDeleteModalOpen(true);
-  };
-
-  const confirmBulkDelete = async () => {
-    setDeleteLoading(true);
-    try {
-      const { error } = await supabase.from('items').delete().in('id', selectedItems);
-      if (error) {
-        console.error('Bulk delete error details:', error);
-        throw error;
-      }
-      showToast(`${selectedItems.length} barang berhasil dihapus`, 'success');
-      setSelectedItems([]);
-      setIsBulkDeleteModalOpen(false);
-      fetchItems();
-    } catch (err: any) {
-      console.error('Catch block bulk delete error:', err);
-      showToast(err.message || 'Gagal menghapus barang secara massal. Pastikan Anda memiliki akses Admin.', 'error');
-    } finally {
-      setDeleteLoading(false);
     }
   };
 
@@ -413,6 +456,9 @@ export default function MasterBarang() {
     setFormError(null);
 
     try {
+      if (profile?.role !== 'admin') {
+        throw new Error('Akses Ditolak: Anda tidak memiliki izin untuk menyimpan perubahan');
+      }
       let finalFotoUrls = [...formData.foto_urls];
 
       // Upload new files
@@ -467,29 +513,67 @@ export default function MasterBarang() {
     }
   };
 
-  const handleDelete = (item: Item) => {
-    setItemToDelete(item);
-    setIsDeleteModalOpen(true);
-  };
+  const confirmBulkStockOut = async () => {
+    if (!selectedItems.length) return;
+    if (!stockOutData.alasan.trim()) {
+      showToast('Alasan harus diisi', 'error');
+      return;
+    }
 
-  const confirmDelete = async () => {
-    if (!itemToDelete) return;
-    setDeleteLoading(true);
+    setFormLoading(true);
     try {
-      const { error } = await supabase.from('items').delete().eq('id', itemToDelete.id);
-      if (error) {
-        console.error('Delete error details:', error);
-        throw error;
+      // 1. Get all selected items details
+      const { data: itemsToMove, error: fetchError } = await supabase
+        .from('items')
+        .select('*')
+        .in('id', selectedItems);
+
+      if (fetchError) throw fetchError;
+      if (!itemsToMove || itemsToMove.length === 0) throw new Error('Barang tidak ditemukan');
+
+      // 2. Prepare history data
+      const historyData = itemsToMove.map(item => ({
+        original_item_id: item.id,
+        kode_barang: item.kode_barang,
+        nama_barang: item.nama_barang,
+        jumlah_barang: item.jumlah_barang,
+        lokasi: item.lokasi,
+        foto_urls: item.foto_urls,
+        deskripsi: item.deskripsi,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        keterangan_alasan: stockOutData.alasan,
+        user_name: profile?.full_name || profile?.email,
+        tanggal_keluar: new Date().toISOString()
+      }));
+
+      // 3. Insert into history
+      const { error: insertError } = await supabase
+        .from('stock_keluar_history')
+        .insert(historyData);
+
+      if (insertError) throw insertError;
+
+      // 4. Delete from items
+      const { error: deleteError } = await supabase
+        .from('items')
+        .delete()
+        .in('id', selectedItems);
+
+      if (deleteError) throw deleteError;
+
+      showToast(`${selectedItems.length} barang berhasil dipindahkan ke riwayat keluar`, 'success');
+      setIsBulkStockOutModalOpen(false);
+      setSelectedItems([]);
+      if (setActiveTab) {
+        setActiveTab('stock-out-history');
+      } else {
+        fetchItems();
       }
-      showToast('Barang berhasil dihapus', 'success');
-      setIsDeleteModalOpen(false);
-      setItemToDelete(null);
-      fetchItems();
     } catch (err: any) {
-      console.error('Catch block delete error:', err);
-      showToast(err.message || 'Gagal menghapus barang. Pastikan Anda memiliki akses Admin.', 'error');
+      showToast(err.message || 'Gagal mengeluarkan barang secara massal', 'error');
     } finally {
-      setDeleteLoading(false);
+      setFormLoading(false);
     }
   };
 
@@ -514,23 +598,27 @@ export default function MasterBarang() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium cursor-pointer">
-            {importLoading ? <Loader2 className="animate-spin" size={20} /> : <FileSpreadsheet size={20} />}
-            <span>Import Excel</span>
-            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleExcelImport} disabled={importLoading} />
-          </label>
-          <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium"
-          >
-            <Plus size={20} />
-            <span>Tambah Barang</span>
-          </button>
+          {profile?.role === 'admin' && (
+            <>
+              <label className="flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium cursor-pointer">
+                {importLoading ? <Loader2 className="animate-spin" size={20} /> : <FileSpreadsheet size={20} />}
+                <span>Import Excel</span>
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleExcelImport} disabled={importLoading} />
+              </label>
+              <button
+                onClick={() => handleOpenModal()}
+                className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium"
+              >
+                <Plus size={20} />
+                <span>Tambah Barang</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Bulk Actions Bar */}
-      {selectedItems.length > 0 && (
+      {selectedItems.length > 0 && profile?.role === 'admin' && (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
           <div className="flex items-center space-x-3">
             <span className="text-blue-700 font-medium">{selectedItems.length} barang terpilih</span>
@@ -541,11 +629,15 @@ export default function MasterBarang() {
             >
               <Edit2 size={16} className="mr-1" /> Edit Massal
             </button>
+            <div className="h-4 w-px bg-blue-200"></div>
             <button 
-              onClick={handleBulkDelete}
-              className="text-red-600 hover:text-red-800 text-sm font-semibold flex items-center"
+              onClick={() => {
+                setStockOutData({ alasan: '' });
+                setIsBulkStockOutModalOpen(true);
+              }}
+              className="text-orange-600 hover:text-orange-800 text-sm font-semibold flex items-center"
             >
-              <Trash2 size={16} className="mr-1" /> Hapus Massal
+              <LogOut size={16} className="mr-1" /> Keluarkan Massal
             </button>
           </div>
           <button onClick={() => setSelectedItems([])} className="text-blue-400 hover:text-blue-600">
@@ -744,36 +836,42 @@ export default function MasterBarang() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTakeItem(item);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                          title="Ambil Barang"
-                        >
-                          <LogOut size={18} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(item);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(item);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {profile?.role === 'admin' ? (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStockOut(item);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Keluarkan Barang"
+                            >
+                              <Archive size={18} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTakeItem(item);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                              title="Ambil Barang"
+                            >
+                              <LogOut size={18} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenModal(item);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 font-medium italic">View Only</span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1310,86 +1408,25 @@ export default function MasterBarang() {
               >
                 Tutup
               </button>
-              <button
-                onClick={() => {
-                  setIsDetailModalOpen(false);
-                  handleOpenModal(selectedItemForDetail);
-                }}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
-              >
-                Edit Barang
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Konfirmasi Hapus</h3>
-              <p className="text-gray-500 mb-6">
-                Apakah Anda yakin ingin menghapus <span className="font-semibold text-gray-900">{itemToDelete.nama_barang}</span>? 
-                Tindakan ini tidak dapat dibatalkan.
-              </p>
-              <div className="flex space-x-3">
+              {profile?.role === 'admin' ? (
                 <button
                   onClick={() => {
-                    setIsDeleteModalOpen(false);
-                    setItemToDelete(null);
+                    setIsDetailModalOpen(false);
+                    handleOpenModal(selectedItemForDetail);
                   }}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
                 >
-                  Batal
+                  Edit Barang
                 </button>
+              ) : (
                 <button
-                  onClick={confirmDelete}
-                  disabled={deleteLoading}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
+                  disabled
+                  className="px-6 py-2 text-sm font-medium text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed flex items-center space-x-2"
                 >
-                  {deleteLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                  <span>Hapus Barang</span>
+                  <AlertCircle size={16} />
+                  <span>Mode Lihat Saja</span>
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Confirmation Modal */}
-      {isBulkDeleteModalOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Massal</h3>
-              <p className="text-gray-500 mb-6">
-                Apakah Anda yakin ingin menghapus <span className="font-semibold text-gray-900">{selectedItems.length} barang</span> terpilih? 
-                Tindakan ini tidak dapat dibatalkan.
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setIsBulkDeleteModalOpen(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={confirmBulkDelete}
-                  disabled={deleteLoading}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  {deleteLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                  <span>Hapus Semua</span>
-                </button>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1453,6 +1490,150 @@ export default function MasterBarang() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Out Modal */}
+      {isStockOutModalOpen && selectedItemForStockOut && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <h3 className="text-lg font-bold text-gray-900">Keluarkan Barang ke Riwayat</h3>
+              <button 
+                onClick={() => setIsStockOutModalOpen(false)} 
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Data Preview (Read-only) */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase">Preview Data Barang</span>
+                  <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold">READ ONLY</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">Kode Barang</p>
+                      <p className="text-sm font-mono text-gray-700">{selectedItemForStockOut.kode_barang}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">Nama Barang</p>
+                      <p className="text-sm font-medium text-gray-900">{selectedItemForStockOut.nama_barang}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">Lokasi</p>
+                      <p className="text-sm text-gray-700">{selectedItemForStockOut.lokasi || '-'}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">Stok Saat Ini</p>
+                      <p className="text-sm font-bold text-gray-900">{selectedItemForStockOut.jumlah_barang} unit</p>
+                    </div>
+                    {selectedItemForStockOut.foto_urls && selectedItemForStockOut.foto_urls.length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Foto</p>
+                        <div className="flex -space-x-2">
+                          {selectedItemForStockOut.foto_urls.slice(0, 4).map((url, idx) => (
+                            <img key={idx} src={url} className="w-8 h-8 rounded-full border-2 border-white object-cover" alt="Preview" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Input Field */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar <span className="text-red-500">*</span></label>
+                <textarea
+                  required
+                  rows={3}
+                  value={stockOutData.alasan}
+                  onChange={(e) => setStockOutData({ alasan: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  placeholder="Contoh: Barang Rusak, Hibah, Pindah Lokasi Permanen, dll."
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50/50">
+              <button
+                onClick={() => setIsStockOutModalOpen(false)}
+                className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmStockOut}
+                disabled={formLoading}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50"
+              >
+                {formLoading ? <Loader2 className="animate-spin" size={18} /> : null}
+                <span>Konfirmasi Pindah ke Riwayat</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Stock Out Modal */}
+      {isBulkStockOutModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <h3 className="text-lg font-bold text-gray-900">Keluarkan {selectedItems.length} Barang</h3>
+              <button 
+                onClick={() => setIsBulkStockOutModalOpen(false)} 
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex items-start space-x-3">
+                <AlertCircle className="text-orange-600 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-medium text-orange-800">Peringatan</p>
+                  <p className="text-xs text-orange-700">
+                    Anda akan mengeluarkan <span className="font-bold">{selectedItems.length} barang</span> sekaligus. 
+                    Barang-barang ini akan dipindahkan ke riwayat dan dihapus dari daftar master.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar Massal <span className="text-red-500">*</span></label>
+                <textarea
+                  required
+                  rows={3}
+                  value={stockOutData.alasan}
+                  onChange={(e) => setStockOutData({ alasan: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  placeholder="Contoh: Pembersihan Gudang, Hibah Massal, dll."
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50/50">
+              <button
+                onClick={() => setIsBulkStockOutModalOpen(false)}
+                className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmBulkStockOut}
+                disabled={formLoading}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50"
+              >
+                {formLoading ? <Loader2 className="animate-spin" size={18} /> : null}
+                <span>Konfirmasi Keluarkan Massal</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

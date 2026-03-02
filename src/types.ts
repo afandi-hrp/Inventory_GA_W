@@ -2,6 +2,7 @@ export interface Profile {
   id: string;
   full_name: string | null;
   role: 'admin' | 'user';
+  is_active: boolean;
   avatar_url: string | null;
   created_at: string;
 }
@@ -19,11 +20,9 @@ export interface Item {
 }
 
 export interface AppSettings {
-  app_title: string;
-  app_logo_url: string;
+  id?: number;
+  login_title: string;
+  login_footer: string;
   login_bg_url: string;
-  footer_text: string;
-  copyright_text: string;
-  primary_color: string;
-  secondary_color: string;
+  updated_at?: string;
 }

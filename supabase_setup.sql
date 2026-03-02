@@ -210,3 +210,32 @@ DROP TRIGGER IF EXISTS on_item_changed ON items;
 CREATE TRIGGER on_item_changed
   AFTER UPDATE OR DELETE ON items
   FOR EACH ROW EXECUTE PROCEDURE public.log_item_changes();
+
+-- Stock Keluar History Table
+CREATE TABLE IF NOT EXISTS stock_keluar_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  original_item_id UUID,
+  kode_barang TEXT,
+  nama_barang TEXT,
+  jumlah_barang INTEGER,
+  lokasi TEXT,
+  foto_urls TEXT[] DEFAULT '{}',
+  deskripsi TEXT,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
+  tanggal_keluar TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  keterangan_alasan TEXT,
+  user_name TEXT
+);
+
+ALTER TABLE stock_keluar_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view stock_keluar_history" 
+ON stock_keluar_history FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Authenticated users can insert stock_keluar_history" 
+ON stock_keluar_history FOR INSERT 
+TO authenticated 
+WITH CHECK (true);
