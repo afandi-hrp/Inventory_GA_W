@@ -17,14 +17,22 @@ export default function Login() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Login error:', error);
+        throw error;
+      }
+      
+      if (!data.user) {
+        throw new Error('No user data returned from login');
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to login');
+      console.error('Caught login exception:', err);
+      setError(err.message || 'Failed to login. Please check your credentials or connection.');
     } finally {
       setLoading(false);
     }

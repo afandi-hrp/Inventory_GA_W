@@ -56,8 +56,8 @@ export function useAuth() {
           throw error;
         }
       } else {
-        if (data && !data.is_active) {
-          // User is disabled, sign them out
+        if (data && data.is_active === false) {
+          // User is explicitly disabled, sign them out
           await supabase.auth.signOut();
           setProfile(null);
           setUser(null);
