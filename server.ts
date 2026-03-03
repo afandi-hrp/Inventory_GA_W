@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -18,19 +17,21 @@ app.use(express.json());
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
+// Initialize Supabase Admin only if keys are present
+const supabaseAdmin = (supabaseUrl && supabaseServiceKey) 
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : null;
 
-const supabaseAdmin = createClient(supabaseUrl || '', supabaseServiceKey || '', {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+const checkAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase Admin not initialized. Check environment variables.' });
   }
-});
 
-// API Route to create user
-app.post('/api/admin/create-user', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: 'No authorization header' });
@@ -38,31 +39,38 @@ app.post('/api/admin/create-user', async (req, res) => {
 
   const token = authHeader.replace('Bearer ', '');
   
-  // 1. Verify the requester is an admin
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-  
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Invalid token' });
+  try {
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || profile?.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin only' });
+    }
+
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error during auth check' });
   }
+};
 
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || profile?.role !== 'admin') {
-    return res.status(403).json({ error: 'Unauthorized: Admin only' });
-  }
-
-  // 2. Create the new user
+// API Route to create user
+app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
   const { email, password, full_name, role } = req.body;
 
   if (!email || !password || !full_name || !role) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+  const { data: newUser, error: createError } = await supabaseAdmin!.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -77,39 +85,10 @@ app.post('/api/admin/create-user', async (req, res) => {
 });
 
 // API Route to delete user
-app.delete('/api/admin/delete-user/:userId', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'No authorization header' });
-  }
-
-  const token = authHeader.replace('Bearer ', '');
+app.delete('/api/admin/delete-user/:userId', checkAdmin, async (req, res) => {
   const { userId } = req.params;
   
-  // 1. Verify the requester is an admin
-  const { data: { user: requester }, error: authError } = await supabaseAdmin.auth.getUser(token);
-  
-  if (authError || !requester) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', requester.id)
-    .single();
-
-  if (profileError || profile?.role !== 'admin') {
-    return res.status(403).json({ error: 'Unauthorized: Admin only' });
-  }
-
-  // 2. Prevent self-deletion
-  if (requester.id === userId) {
-    return res.status(400).json({ error: 'Cannot delete your own account' });
-  }
-
-  // 3. Delete the user
-  const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  const { error: deleteError } = await supabaseAdmin!.auth.admin.deleteUser(userId);
 
   if (deleteError) {
     return res.status(400).json({ error: deleteError.message });
@@ -120,24 +99,19 @@ app.delete('/api/admin/delete-user/:userId', async (req, res) => {
 
 // Vite middleware for development
 if (process.env.NODE_ENV !== 'production') {
+  const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
     server: { middlewareMode: true },
     appType: 'spa',
   });
   app.use(vite.middlewares);
-} else {
-  // Serve static files from dist in production
-  app.use(express.static(path.join(__dirname, 'dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-  });
 }
 
 // Export the app for Vercel
 export default app;
 
-// Start the server if not running on Vercel (which uses the exported app)
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+// Start the server if not running on Vercel
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running at http://0.0.0.0:${port}`);
   });
