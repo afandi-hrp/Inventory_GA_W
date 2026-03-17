@@ -1,6 +1,7 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -100,13 +101,19 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     appType: 'spa',
   });
   app.use(vite.middlewares);
+} else if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
 }
 
 // Export the app for Vercel
 export default app;
 
 // Start the server if not running on Vercel
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running at http://0.0.0.0:${port}`);
   });

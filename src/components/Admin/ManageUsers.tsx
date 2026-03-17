@@ -116,8 +116,15 @@ export default function ManageUsers() {
         body: JSON.stringify(newUserForm)
       });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Gagal membuat user');
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Gagal membuat user');
+      } else {
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error('Server mengembalikan respons yang tidak valid (bukan JSON). Pastikan backend API berjalan.');
+      }
 
       showToast('User berhasil dibuat', 'success');
       setIsAddUserModalOpen(false);
@@ -251,8 +258,15 @@ export default function ManageUsers() {
         }
       });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Gagal menghapus user');
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Gagal menghapus user');
+      } else {
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error('Server mengembalikan respons yang tidak valid (bukan JSON). Pastikan backend API berjalan.');
+      }
 
       showToast('User berhasil dihapus', 'success');
       fetchProfiles();
