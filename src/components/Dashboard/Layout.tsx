@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useSettings } from '../../hooks/useSettings';
@@ -43,6 +43,44 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  // Auto logout after 10 minutes of inactivity
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetTimer = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    // 10 minutes = 10 * 60 * 1000 = 600000 ms
+    timeoutRef.current = setTimeout(() => {
+      handleLogout();
+    }, 600000);
+  }, []);
+
+  useEffect(() => {
+    // Initialize timer
+    resetTimer();
+
+    // Events to track user activity
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+
+    const handleActivity = () => {
+      resetTimer();
+    };
+
+    events.forEach((event) => {
+      window.addEventListener(event, handleActivity);
+    });
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      events.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
+    };
+  }, [resetTimer]);
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-[#FFF9E3] via-[#FFDAB9] to-[#FFB08E] flex">
