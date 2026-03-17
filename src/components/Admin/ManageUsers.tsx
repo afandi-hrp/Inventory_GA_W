@@ -103,7 +103,8 @@ export default function ManageUsers() {
 
     setActionLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
       if (!session) throw new Error('No active session');
 
       const response = await fetch('/api/admin/create-user', {
@@ -239,7 +240,8 @@ export default function ManageUsers() {
 
     setActionLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
       if (!session) throw new Error('No active session');
 
       const response = await fetch(`/api/admin/delete-user/${targetProfile.id}`, {

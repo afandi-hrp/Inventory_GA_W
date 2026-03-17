@@ -10,10 +10,21 @@ export function useAuth() {
 
   useEffect(() => {
     // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn('Session check error:', error.message);
+        // If there's an error (like invalid refresh token), ensure we clear the state
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id, session.user);
       else setLoading(false);
+    }).catch(err => {
+      console.warn('Unexpected session error:', err);
+      setLoading(false);
     });
 
     // Listen for changes on auth state (logged in, signed out, etc.)
