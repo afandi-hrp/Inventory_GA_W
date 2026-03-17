@@ -5,7 +5,7 @@ import { useToast } from '../UI/Toast';
 import { 
   User as UserIcon, Mail, Shield, Key, Camera, 
   Loader2, Save, AlertCircle, CheckCircle2, UserPlus,
-  Trash2, Edit2, X
+  Edit2, X
 } from 'lucide-react';
 import { Profile } from '../../types';
 import { clsx, type ClassValue } from 'clsx';
@@ -116,15 +116,8 @@ export default function ManageUsers() {
         body: JSON.stringify(newUserForm)
       });
 
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Gagal membuat user');
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error('Server mengembalikan respons yang tidak valid (bukan JSON). Pastikan backend API berjalan.');
-      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Gagal membuat user');
 
       showToast('User berhasil dibuat', 'success');
       setIsAddUserModalOpen(false);
@@ -197,85 +190,6 @@ export default function ManageUsers() {
     }
   };
 
-  const toggleUserRole = async (targetProfile: Profile) => {
-    // The UI is already guarded by profile?.role === 'admin' check
-    // but we can keep a simple check for safety.
-    if (!profile || profile.role !== 'admin') {
-      showToast('Hanya admin yang dapat mengubah role', 'error');
-      return;
-    }
-    
-    const newRole = targetProfile.role === 'admin' ? 'user' : 'admin';
-    const confirmMessage = `Apakah Anda yakin ingin mengubah role ${targetProfile.full_name || 'User'} menjadi ${newRole === 'admin' ? 'Admin' : 'User'}?`;
-    
-    if (!window.confirm(confirmMessage)) return;
-    
-    // Optimistic UI update using functional state to avoid stale closures
-    const previousProfiles = [...profiles];
-    setProfiles(prev => prev.map(p => p.id === targetProfile.id ? { ...p, role: newRole } : p));
-    
-    setActionLoading(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole })
-        .eq('id', targetProfile.id);
-
-      if (error) throw error;
-      
-      showToast(`Role ${targetProfile.full_name || 'user'} berhasil diubah menjadi ${newRole}`, 'success');
-      // Refresh data to ensure sync with server
-      fetchProfiles();
-    } catch (err: any) {
-      // Rollback on error
-      setProfiles(previousProfiles);
-      showToast(err.message || 'Gagal mengubah role', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteUser = async (targetProfile: Profile) => {
-    if (profile?.role !== 'admin') return;
-    if (targetProfile.id === user?.id) {
-      showToast('Anda tidak dapat menghapus akun Anda sendiri', 'error');
-      return;
-    }
-
-    const confirmMessage = `Apakah Anda yakin ingin menghapus ${targetProfile.full_name || 'User'}? Tindakan ini tidak dapat dibatalkan.`;
-    if (!window.confirm(confirmMessage)) return;
-
-    setActionLoading(true);
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-      if (!session) throw new Error('No active session');
-
-      const response = await fetch(`/api/admin/delete-user/${targetProfile.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      });
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Gagal menghapus user');
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error('Server mengembalikan respons yang tidak valid (bukan JSON). Pastikan backend API berjalan.');
-      }
-
-      showToast('User berhasil dihapus', 'success');
-      fetchProfiles();
-    } catch (err: any) {
-      showToast(err.message || 'Gagal menghapus user', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -439,7 +353,6 @@ export default function ManageUsers() {
                       <th className="px-6 py-4">User</th>
                       <th className="px-6 py-4">Role</th>
                       <th className="px-6 py-4">Bergabung</th>
-                      <th className="px-6 py-4 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -470,35 +383,6 @@ export default function ManageUsers() {
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500">
                           {new Date(p.created_at).toLocaleDateString('id-ID')}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          {p.id !== user?.id && (
-                            <div className="flex items-center justify-end space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleUserRole(p);
-                                }}
-                                disabled={actionLoading}
-                                className="text-xs font-bold text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-                              >
-                                Ubah ke {p.role === 'admin' ? 'User' : 'Admin'}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleDeleteUser(p);
-                                }}
-                                disabled={actionLoading}
-                                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                                title="Hapus User"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))}
