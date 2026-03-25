@@ -805,16 +805,16 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
       {/* Location Stats */}
       {locationStats.length > 0 && (
-        <div className="max-h-[160px] overflow-y-auto pr-2">
+        <div className="max-h-[160px] overflow-y-auto pr-2 scrollbar-hide">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-500">
             {locationStats.map((stat, idx) => (
-              <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-3 hover:border-blue-200 transition-colors cursor-pointer" onClick={() => setFilterLokasi(availableLocations.find(l => l.nama_lokasi === stat.name)?.kode_lokasi || '')}>
-                <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
+              <div key={idx} className="bg-white/40 backdrop-blur-xl p-4 rounded-3xl shadow-lg border border-white/60 flex items-center space-x-3 hover:border-blue-300 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => setFilterLokasi(availableLocations.find(l => l.nama_lokasi === stat.name)?.kode_lokasi || '')}>
+                <div className="p-2.5 rounded-2xl bg-white/50 text-blue-600 shrink-0 border border-white/50 shadow-inner group-hover:scale-110 transition-transform">
                   <MapPin size={20} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="text-sm font-semibold text-gray-900 truncate" title={stat.name}>{stat.name}</h4>
-                  <p className="text-xs text-gray-500 truncate">{stat.count} Jenis • {stat.stock} Total Stok</p>
+                  <p className="text-xs text-gray-600 truncate font-medium">{stat.count} Jenis • {stat.stock} Total Stok</p>
                 </div>
               </div>
             ))}
@@ -823,7 +823,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       )}
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
+      <div className="bg-white/60 backdrop-blur-xl p-5 rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row gap-4">
         <div className="md:flex-[2] relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -875,7 +875,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             setFilterLokasi('');
             setPage(1);
           }}
-          className="flex items-center justify-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+          className="flex items-center justify-center space-x-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-500/20 backdrop-blur-md rounded-lg transition-all text-sm font-medium whitespace-nowrap shadow-sm"
         >
           <XCircle size={16} />
           <span>Reset Pencarian</span>
@@ -883,7 +883,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>

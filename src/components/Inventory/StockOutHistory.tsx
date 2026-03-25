@@ -64,6 +64,25 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
   const [isExportPreviewOpen, setIsExportPreviewOpen] = useState(false);
   const [exportData, setExportData] = useState<any[]>([]);
 
+  // Lightbox state
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev === lightboxImages.length - 1 ? 0 : prev + 1));
+  };
+
+  const handlePrevImage = () => {
+    setCurrentImageIndex((prev) => (prev === 0 ? lightboxImages.length - 1 : prev - 1));
+  };
+
+  const openLightbox = (images: string[], index: number) => {
+    setLightboxImages(images);
+    setCurrentImageIndex(index);
+    setIsLightboxOpen(true);
+  };
+
   useEffect(() => {
     fetchHistory();
   }, [page, search, startDate, endDate, sortColumn, sortOrder, itemsPerPage]);
@@ -263,7 +282,7 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col lg:flex-row gap-4">
+      <div className="bg-white/60 backdrop-blur-xl p-5 rounded-3xl shadow-lg border border-white/50 flex flex-col lg:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -300,7 +319,7 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                 setEndDate('');
                 setSearch('');
               }}
-              className="text-sm text-red-600 hover:text-red-700 font-medium px-2"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 backdrop-blur-md rounded-lg transition-all whitespace-nowrap shadow-sm"
             >
               Reset
             </button>
@@ -309,7 +328,7 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -431,76 +450,62 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
               Menampilkan <span className="font-medium text-gray-900">{(page - 1) * itemsPerPage + 1}</span> sampai <span className="font-medium text-gray-900">{Math.min(page * itemsPerPage, totalCount)}</span> dari <span className="font-medium text-gray-900">{totalCount}</span> riwayat
             </p>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500">Baris:</span>
+              <span className="text-sm text-gray-500">Per halaman:</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => {
                   setItemsPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                className="text-sm border border-gray-200 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {[5, 10, 20, 50].map(size => (
-                  <option key={size} value={size}>{size} per halaman</option>
+                {[10, 20, 50, 100, 1000].map(size => (
+                  <option key={size} value={size}>{size}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="p-2 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all bg-white shadow-sm"
-              title="Halaman Sebelumnya"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            
-            <div className="flex items-center -space-x-px">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
-                // Show first, last, current, and neighbors
-                if (
-                  p === 1 || 
-                  p === totalPages || 
-                  (p >= page - 1 && p <= page + 1)
-                ) {
+          {totalPages > 1 && (
+            <div className="flex items-center space-x-2">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = page;
+                  if (totalPages <= 5) pageNum = i + 1;
+                  else if (page <= 3) pageNum = i + 1;
+                  else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                  else pageNum = page - 2 + i;
+
                   return (
                     <button
-                      key={p}
-                      onClick={() => setPage(p)}
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
                       className={cn(
-                        "w-9 h-9 flex items-center justify-center text-sm font-medium border transition-all",
-                        page === p 
-                          ? "z-10 bg-blue-600 text-white border-blue-600 shadow-sm" 
-                          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                        "w-8 h-8 text-sm font-medium rounded-lg transition-colors",
+                        page === pageNum ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
                       )}
                     >
-                      {p}
+                      {pageNum}
                     </button>
                   );
-                }
-                // Show ellipses
-                if (p === 2 || p === totalPages - 1) {
-                  return (
-                    <span key={p} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 text-gray-400 text-xs">
-                      ...
-                    </span>
-                  );
-                }
-                return null;
-              })}
+                })}
+              </div>
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage(p => p + 1)}
+                className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
-
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages || totalPages === 0}
-              className="p-2 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all bg-white shadow-sm"
-              title="Halaman Berikutnya"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
@@ -577,9 +582,13 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foto Snapshot</label>
                   <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-3">
                     {selectedEntry.foto_urls.map((url, idx) => (
-                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-lg overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all">
+                      <div 
+                        key={idx} 
+                        onClick={() => openLightbox(selectedEntry.foto_urls, idx)}
+                        className="aspect-square rounded-lg overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all cursor-pointer"
+                      >
                         <img src={url} alt="Snapshot" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      </a>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -715,6 +724,62 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal */}
+      {isLightboxOpen && lightboxImages.length > 0 && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          <button 
+            className="absolute top-6 right-6 p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all z-10"
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            <X size={32} />
+          </button>
+
+          <div className="relative w-full h-full flex items-center justify-center p-4">
+            {lightboxImages.length > 1 && (
+              <button 
+                className="absolute left-6 p-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrevImage();
+                }}
+              >
+                <ChevronLeft size={48} />
+              </button>
+            )}
+
+            <div className="max-w-5xl max-h-[85vh] relative group" onClick={(e) => e.stopPropagation()}>
+              <img 
+                src={lightboxImages[currentImageIndex]} 
+                alt="Enlarged view" 
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {lightboxImages.length > 1 && (
+              <button 
+                className="absolute right-6 p-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNextImage();
+                }}
+              >
+                <ChevronRight size={48} />
+              </button>
+            )}
+
+            {lightboxImages.length > 1 && (
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-black/50 rounded-full text-white text-lg font-medium backdrop-blur-md border border-white/10">
+                {currentImageIndex + 1} / {lightboxImages.length}
+              </div>
+            )}
           </div>
         </div>
       )}

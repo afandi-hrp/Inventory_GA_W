@@ -127,16 +127,16 @@ export default function DashboardHome() {
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Items" value={stats.totalItems} icon={<Package className="text-blue-600" />} color="bg-blue-50" />
-        <StatCard title="Total Lokasi" value={stats.totalLocations} icon={<MapPin className="text-emerald-600" />} color="bg-emerald-50" />
-        <StatCard title="Total User" value={stats.totalUsers} icon={<Users className="text-amber-600" />} color="bg-amber-50" />
-        <StatCard title="Total Stok" value={stats.totalStock} icon={<TrendingUp className="text-rose-600" />} color="bg-rose-50" />
+        <StatCard title="Total Items" value={stats.totalItems} icon={<Package className="text-blue-600" size={24} />} color="bg-blue-500/10 border border-blue-500/20" />
+        <StatCard title="Total Lokasi" value={stats.totalLocations} icon={<MapPin className="text-emerald-600" size={24} />} color="bg-emerald-500/10 border border-emerald-500/20" />
+        <StatCard title="Total User" value={stats.totalUsers} icon={<Users className="text-amber-600" size={24} />} color="bg-amber-500/10 border border-amber-500/20" />
+        <StatCard title="Total Stok" value={stats.totalStock} icon={<TrendingUp className="text-rose-600" size={24} />} color="bg-rose-500/10 border border-rose-500/20" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-6 flex items-center">
+        <div className="bg-white/60 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50">
+          <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-800">
             <TrendingUp className="mr-2 text-blue-600" size={20} />
             Statistik Bulanan (6 Bulan Terakhir)
           </h3>
@@ -179,33 +179,33 @@ export default function DashboardHome() {
         </div>
 
         {/* Recent Items */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[420px]">
-          <h3 className="text-lg font-semibold mb-6 flex items-center shrink-0">
+        <div className="bg-white/60 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50 flex flex-col h-[420px]">
+          <h3 className="text-lg font-semibold mb-6 flex items-center shrink-0 text-gray-800">
             <Clock className="mr-2 text-blue-600" size={20} />
             Barang Terbaru
           </h3>
-          <div className="overflow-y-auto flex-1 pr-2">
+          <div className="overflow-y-auto flex-1 pr-2 scrollbar-hide">
             <table className="w-full text-left relative">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr className="text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                  <th className="pb-3 bg-white">Barang</th>
-                  <th className="pb-3 bg-white">Kode</th>
-                  <th className="pb-3 bg-white">Lokasi</th>
-                  <th className="pb-3 bg-white text-right">Stok</th>
+              <thead className="sticky top-0 bg-white/80 backdrop-blur-md z-10 rounded-t-xl">
+                <tr className="text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200/50">
+                  <th className="pb-3 pt-2 px-2 bg-transparent">Barang</th>
+                  <th className="pb-3 pt-2 px-2 bg-transparent">Kode</th>
+                  <th className="pb-3 pt-2 px-2 bg-transparent">Lokasi</th>
+                  <th className="pb-3 pt-2 px-2 bg-transparent text-right">Stok</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100/50">
                 {recentItems.map((item, index) => (
-                  <tr key={item.id} className={`text-sm hover:bg-gray-50 transition-colors ${index < 5 ? 'bg-blue-50/30' : ''}`}>
-                    <td className="py-4 font-medium text-gray-900">
+                  <tr key={item.id} className={`text-sm hover:bg-white/50 transition-colors ${index < 5 ? 'bg-blue-500/5' : ''}`}>
+                    <td className="py-4 px-2 font-medium text-gray-900">
                       <div className="flex items-center space-x-2">
-                        {index < 5 && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" title="Top 5 Terbaru"></span>}
-                        <span className={index < 5 ? 'text-blue-700' : ''}>{item.nama_barang}</span>
+                        {index < 5 && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 shadow-[0_0_8px_rgba(59,130,246,0.6)]" title="Top 5 Terbaru"></span>}
+                        <span className={index < 5 ? 'text-blue-700 font-semibold' : ''}>{item.nama_barang}</span>
                       </div>
                     </td>
-                    <td className="py-4 text-gray-500">{item.kode_barang}</td>
-                    <td className="py-4 text-gray-500">{(item as any).master_lokasi?.nama_lokasi || item.kode_lokasi || '-'}</td>
-                    <td className="py-4 text-right font-semibold text-blue-600">{item.jumlah_barang}</td>
+                    <td className="py-4 px-2 text-gray-500">{item.kode_barang}</td>
+                    <td className="py-4 px-2 text-gray-500">{(item as any).master_lokasi?.nama_lokasi || item.kode_lokasi || '-'}</td>
+                    <td className="py-4 px-2 text-right font-bold text-blue-600">{item.jumlah_barang}</td>
                   </tr>
                 ))}
                 {recentItems.length === 0 && (
@@ -224,13 +224,13 @@ export default function DashboardHome() {
 
 function StatCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
-      <div className={`p-3 rounded-lg ${color}`}>
+    <div className="bg-white/60 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50 flex items-center space-x-5 hover:shadow-xl transition-all hover:-translate-y-1 group">
+      <div className={`p-4 rounded-2xl ${color} shadow-inner group-hover:scale-110 transition-transform`}>
         {icon}
       </div>
       <div>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-900">{value.toLocaleString()}</p>
+        <p className="text-sm font-semibold text-gray-500 mb-1">{title}</p>
+        <p className="text-3xl font-bold text-gray-900 tracking-tight">{value.toLocaleString()}</p>
       </div>
     </div>
   );

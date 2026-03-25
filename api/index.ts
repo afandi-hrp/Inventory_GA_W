@@ -2,11 +2,40 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
 const app = express();
 const port = 3000;
+
+// Security Middlewares
+// 1. Helmet: Adds various HTTP headers to secure the app (e.g., XSS filter, prevent clickjacking)
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled for Vite dev server compatibility
+  crossOriginEmbedderPolicy: false,
+}));
+
+// 2. CORS: Restrict cross-origin requests
+app.use(cors({
+  origin: process.env.VITE_APP_URL || '*', // Allow only the specific origin in production
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// 3. Rate Limiting: Prevent Brute Force & Botnet attacks on API routes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  message: { error: 'Terlalu banyak permintaan dari IP ini, silakan coba lagi setelah 15 menit.' },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Apply the rate limiting middleware to API calls only
+app.use('/api/', apiLimiter);
 
 app.use(express.json());
 

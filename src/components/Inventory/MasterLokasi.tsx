@@ -164,7 +164,7 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white/60 backdrop-blur-xl p-5 rounded-3xl shadow-lg border border-white/50">
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -180,7 +180,7 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -256,20 +256,20 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
         </div>
 
         {/* Pagination Controls */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="px-6 py-4 border-t border-gray-200/50 bg-gray-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <div className="text-sm text-gray-500">
               Menampilkan <span className="font-medium text-gray-900">{(page - 1) * itemsPerPage + 1}</span> sampai <span className="font-medium text-gray-900">{Math.min(page * itemsPerPage, totalCount)}</span> dari <span className="font-medium text-gray-900">{totalCount}</span> lokasi
             </div>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500">Baris:</span>
+              <span className="text-sm text-gray-500">Per halaman:</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => {
                   setItemsPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                className="text-sm border border-gray-200 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 {[10, 20, 50, 100, 1000].map(size => (
                   <option key={size} value={size}>{size}</option>
@@ -281,44 +281,38 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
           {totalPages > 1 && (
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="p-2 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                onClick={() => setPage(p => p - 1)}
+                className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 <ChevronLeft size={18} />
               </button>
               <div className="flex items-center space-x-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
-                  if (
-                    p === 1 || 
-                    p === totalPages || 
-                    (p >= page - 1 && p <= page + 1)
-                  ) {
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={cn(
-                          "w-8 h-8 rounded-lg text-sm font-medium transition-all",
-                          page === p 
-                            ? "bg-blue-600 text-white shadow-md shadow-blue-200" 
-                            : "text-gray-600 hover:bg-white border border-transparent hover:border-gray-200"
-                        )}
-                      >
-                        {p}
-                      </button>
-                    );
-                  }
-                  if (p === 2 || p === totalPages - 1) {
-                    return <span key={p} className="px-1 text-gray-400">...</span>;
-                  }
-                  return null;
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = page;
+                  if (totalPages <= 5) pageNum = i + 1;
+                  else if (page <= 3) pageNum = i + 1;
+                  else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                  else pageNum = page - 2 + i;
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={cn(
+                        "w-8 h-8 text-sm font-medium rounded-lg transition-colors",
+                        page === pageNum ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
+                      )}
+                    >
+                      {pageNum}
+                    </button>
+                  );
                 })}
               </div>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="p-2 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                onClick={() => setPage(p => p + 1)}
+                className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 <ChevronRight size={18} />
               </button>

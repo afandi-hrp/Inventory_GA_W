@@ -100,7 +100,7 @@ export default function LoginSettings() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Form Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 p-6 space-y-6">
           <form onSubmit={handleSave} className="space-y-6">
             <div className="space-y-4">
               <div>
@@ -202,7 +202,7 @@ export default function LoginSettings() {
               Live Preview
             </div>
           </div>
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+          <div className="bg-blue-500/10 backdrop-blur-md p-4 rounded-xl border border-blue-500/20">
             <p className="text-xs text-blue-700 leading-relaxed">
               <strong>Tips:</strong> Gunakan gambar dengan kontras yang baik agar teks tetap terbaca. Perubahan pada pratinjau bersifat sementara sampai Anda menekan tombol <strong>Simpan</strong>.
             </p>

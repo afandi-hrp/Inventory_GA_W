@@ -224,8 +224,8 @@ export default function ManageUsers() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Profile Section */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+          <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
+            <div className="p-6 border-b border-white/30 bg-white/20">
               <h3 className="font-bold text-gray-900 flex items-center">
                 <UserIcon size={18} className="mr-2 text-blue-600" />
                 Profil Saya
@@ -291,8 +291,8 @@ export default function ManageUsers() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+          <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
+            <div className="p-6 border-b border-white/30 bg-white/20">
               <h3 className="font-bold text-gray-900 flex items-center">
                 <Key size={18} className="mr-2 text-orange-600" />
                 Ganti Password
@@ -336,8 +336,8 @@ export default function ManageUsers() {
         {/* User List Section (Admin Only) */}
         <div className="lg:col-span-2">
           {profile?.role === 'admin' ? (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden h-full flex flex-col">
+              <div className="p-6 border-b border-white/30 bg-white/20 flex items-center justify-between">
                 <h3 className="font-bold text-gray-900 flex items-center">
                   <Shield size={18} className="mr-2 text-emerald-600" />
                   Daftar Seluruh Pengguna
@@ -369,7 +369,6 @@ export default function ManageUsers() {
                             </div>
                             <div>
                               <p className="text-sm font-bold text-gray-900">{p.full_name || 'No Name'}</p>
-                              <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{p.id}</p>
                             </div>
                           </div>
                         </td>
@@ -402,11 +401,11 @@ export default function ManageUsers() {
                 </p>
               </div>
               <div className="pt-4 grid grid-cols-2 gap-4 w-full max-w-xs">
-                <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-sm">
+                <div className="bg-white/60 backdrop-blur-md p-3 rounded-xl border border-white/50 shadow-sm">
                   <p className="text-[10px] font-bold text-gray-400 uppercase">Inventory</p>
                   <p className="text-xs font-bold text-blue-600">View Only</p>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-sm">
+                <div className="bg-white/60 backdrop-blur-md p-3 rounded-xl border border-white/50 shadow-sm">
                   <p className="text-[10px] font-bold text-gray-400 uppercase">Profile</p>
                   <p className="text-xs font-bold text-blue-600">Full Access</p>
                 </div>
@@ -423,10 +422,10 @@ export default function ManageUsers() {
           onClick={() => setIsAddUserModalOpen(false)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
+            className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
+            <div className="px-6 py-4 border-b border-white/30 flex items-center justify-between bg-white/20 shrink-0">
               <h3 className="text-lg font-bold text-gray-900 flex items-center">
                 <UserPlus size={20} className="mr-2 text-blue-600" />
                 Tambah User Baru
