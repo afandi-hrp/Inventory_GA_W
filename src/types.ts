@@ -1,7 +1,7 @@
 export interface Profile {
   id: string;
   full_name: string | null;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'auditor';
   is_active: boolean;
   avatar_url: string | null;
   created_at: string;
@@ -15,6 +15,7 @@ export interface Item {
   kode_lokasi: string | null;
   foto_urls: string[];
   deskripsi: string | null;
+  note_audit?: string | null;
   created_at: string;
   updated_at: string;
 }

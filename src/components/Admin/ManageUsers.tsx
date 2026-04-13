@@ -28,7 +28,7 @@ export default function ManageUsers() {
     email: '',
     password: '',
     full_name: '',
-    role: 'user' as 'admin' | 'user'
+    role: 'user' as 'admin' | 'user' | 'auditor'
   });
 
   // Profile Edit State
@@ -210,15 +210,6 @@ export default function ManageUsers() {
               : 'Kelola informasi profil dan keamanan akun Anda'}
           </p>
         </div>
-        {profile?.role === 'admin' && (
-          <button
-            onClick={() => setIsAddUserModalOpen(true)}
-            className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-blue-200 transition-all font-bold"
-          >
-            <UserPlus size={20} />
-            <span>Tambah User Baru</span>
-          </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -474,11 +465,12 @@ export default function ManageUsers() {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Role</label>
                 <select
                   value={newUserForm.role}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'admin' | 'user' })}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'admin' | 'user' | 'auditor' })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                 >
                   <option value="user">User (View Only)</option>
                   <option value="admin">Admin (Full Access)</option>
+                  <option value="auditor">Auditor (Audit Only)</option>
                 </select>
               </div>
 

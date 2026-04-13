@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1); // Trust the reverse proxy
 const port = 3000;
 
 // Security Middlewares
@@ -32,6 +33,10 @@ const apiLimiter = rateLimit({
   message: { error: 'Terlalu banyak permintaan dari IP ini, silakan coba lagi setelah 15 menit.' },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  validate: {
+    xForwardedForHeader: false,
+    default: true,
+  },
 });
 
 // Apply the rate limiting middleware to API calls only

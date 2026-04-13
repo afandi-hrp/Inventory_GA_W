@@ -72,6 +72,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     jumlah_barang: 0,
     kode_lokasi: '',
     deskripsi: '',
+    note_audit: '',
     foto_urls: [] as string[],
   });
 
@@ -320,10 +321,15 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   };
 
   const handleOpenModal = (item?: Item) => {
-    if (profile?.role !== 'admin') {
+    if (profile?.role !== 'admin' && profile?.role !== 'auditor') {
       showToast('Akses Ditolak: Anda tidak memiliki izin untuk melakukan aksi ini', 'error');
       return;
     }
+    if (profile?.role === 'auditor' && !item) {
+      showToast('Akses Ditolak: Auditor tidak dapat menambah barang baru', 'error');
+      return;
+    }
+
     if (item) {
       setEditingItem(item);
       setFormData({
@@ -332,6 +338,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         jumlah_barang: item.jumlah_barang,
         kode_lokasi: item.kode_lokasi || '',
         deskripsi: item.deskripsi || '',
+        note_audit: item.note_audit || '',
         foto_urls: item.foto_urls || [],
       });
       setPreviewUrls(item.foto_urls || []);
@@ -343,6 +350,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         jumlah_barang: 0,
         kode_lokasi: '',
         deskripsi: '',
+        note_audit: '',
         foto_urls: [],
       });
       setPreviewUrls([]);
@@ -593,13 +601,14 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     setFormError(null);
 
     try {
-      if (profile?.role !== 'admin') {
+      if (profile?.role !== 'admin' && profile?.role !== 'auditor') {
         throw new Error('Akses Ditolak: Anda tidak memiliki izin untuk menyimpan perubahan');
       }
+      
       let finalFotoUrls = [...formData.foto_urls];
 
-      // Upload new files
-      if (selectedFiles.length > 0) {
+      // Upload new files (only if admin)
+      if (selectedFiles.length > 0 && profile?.role === 'admin') {
         setUploadingPhoto(true);
         const uploadPromises = selectedFiles.map(async (file) => {
           const fileExt = file.name.split('.').pop();
@@ -622,21 +631,31 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         setUploadingPhoto(false);
       }
 
-      const payload = {
+      let payload: any = {
         ...formData,
         foto_urls: finalFotoUrls,
         updated_at: new Date().toISOString(),
       };
 
+      if (profile?.role === 'auditor') {
+        // Auditor can only update note_audit
+        payload = {
+          note_audit: formData.note_audit,
+          updated_at: new Date().toISOString(),
+        };
+      }
+
       if (editingItem) {
-        const isChanged = 
-          formData.kode_barang !== editingItem.kode_barang ||
-          formData.nama_barang !== editingItem.nama_barang ||
-          formData.jumlah_barang !== editingItem.jumlah_barang ||
-          formData.kode_lokasi !== (editingItem.kode_lokasi || '') ||
-          formData.deskripsi !== (editingItem.deskripsi || '') ||
-          selectedFiles.length > 0 ||
-          JSON.stringify(formData.foto_urls) !== JSON.stringify(editingItem.foto_urls || []);
+        const isChanged = profile?.role === 'auditor' 
+          ? formData.note_audit !== (editingItem.note_audit || '')
+          : (formData.kode_barang !== editingItem.kode_barang ||
+            formData.nama_barang !== editingItem.nama_barang ||
+            formData.jumlah_barang !== editingItem.jumlah_barang ||
+            formData.kode_lokasi !== (editingItem.kode_lokasi || '') ||
+            formData.deskripsi !== (editingItem.deskripsi || '') ||
+            formData.note_audit !== (editingItem.note_audit || '') ||
+            selectedFiles.length > 0 ||
+            JSON.stringify(formData.foto_urls) !== JSON.stringify(editingItem.foto_urls || []));
 
         if (!isChanged) {
           setIsModalOpen(false);
@@ -947,20 +966,21 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     )}
                   </div>
                 </th>
+                <th className="px-6 py-4">Catatan Audit</th>
                 <th className="px-6 py-4 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                     <p className="text-gray-500">Memuat data...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <Package className="mx-auto text-gray-300 mb-2" size={48} />
                     <p className="text-gray-500">Tidak ada barang ditemukan</p>
                   </td>
@@ -1026,6 +1046,9 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         {item.jumlah_barang}
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      <div className="text-xs text-gray-500 truncate max-w-[150px]">{item.note_audit || '-'}</div>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <button
@@ -1041,28 +1064,32 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         >
                           <History size={18} />
                         </button>
-                        {profile?.role === 'admin' ? (
+                        {profile?.role === 'admin' || profile?.role === 'auditor' ? (
                           <>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStockOut(item);
-                              }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Keluarkan Barang"
-                            >
-                              <Archive size={18} />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTakeItem(item);
-                              }}
-                              className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                              title="Ambil Barang"
-                            >
-                              <LogOut size={18} />
-                            </button>
+                            {profile?.role === 'admin' && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStockOut(item);
+                                  }}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Keluarkan Barang"
+                                >
+                                  <Archive size={18} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTakeItem(item);
+                                  }}
+                                  className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                  title="Ambil Barang"
+                                >
+                                  <LogOut size={18} />
+                                </button>
+                              </>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1184,9 +1211,10 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     <input
                       type="text"
                       required
+                      disabled={profile?.role === 'auditor'}
                       value={formData.kode_barang}
                       onChange={(e) => setFormData({ ...formData, kode_barang: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50 font-mono"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50 font-mono disabled:opacity-60"
                     />
                   </div>
                   <div>
@@ -1194,9 +1222,10 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     <input
                       type="text"
                       required
+                      disabled={profile?.role === 'auditor'}
                       value={formData.nama_barang}
                       onChange={(e) => setFormData({ ...formData, nama_barang: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:opacity-60 disabled:bg-gray-50"
                       placeholder="Contoh: Laptop Dell XPS 15"
                     />
                   </div>
@@ -1207,18 +1236,20 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         type="number"
                         min="0"
                         required
+                        disabled={profile?.role === 'auditor'}
                         value={formData.jumlah_barang}
                         onChange={(e) => setFormData({ ...formData, jumlah_barang: parseInt(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:opacity-60 disabled:bg-gray-50"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi</label>
                       <select
                         required
+                        disabled={profile?.role === 'auditor'}
                         value={formData.kode_lokasi}
                         onChange={(e) => setFormData({ ...formData, kode_lokasi: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white disabled:opacity-60 disabled:bg-gray-50"
                       >
                         <option value="">Pilih Lokasi</option>
                         {availableLocations.map((loc) => (
@@ -1231,43 +1262,60 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
                     <textarea
                       rows={3}
+                      disabled={profile?.role === 'auditor'}
                       value={formData.deskripsi}
                       onChange={(e) => setFormData({ ...formData, deskripsi: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:opacity-60 disabled:bg-gray-50"
                       placeholder="Keterangan tambahan..."
                     />
                   </div>
+                  {profile?.role === 'auditor' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Catatan Audit</label>
+                      <textarea
+                        rows={3}
+                        value={formData.note_audit}
+                        onChange={(e) => setFormData({ ...formData, note_audit: e.target.value })}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-blue-50/30"
+                        placeholder="Masukkan catatan audit..."
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Right Column: Photo Upload */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-gray-700">Foto Barang ({formData.foto_urls.length + selectedFiles.length}/10)</label>
-                    <button 
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={formData.foto_urls.length + selectedFiles.length >= 10}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400"
-                    >
-                      + Tambah Foto
-                    </button>
+                    {profile?.role !== 'auditor' && (
+                      <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={formData.foto_urls.length + selectedFiles.length >= 10}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+                      >
+                        + Tambah Foto
+                      </button>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-3 gap-2">
                     {previewUrls.map((url, idx) => (
                       <div key={idx} className="relative aspect-square group">
                         <img src={url} alt={`Preview ${idx}`} className="w-full h-full object-cover rounded-lg border border-gray-200" referrerPolicy="no-referrer" />
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(idx, idx < formData.foto_urls.length)}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        >
-                          <X size={12} />
-                        </button>
+                        {profile?.role !== 'auditor' && (
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(idx, idx < formData.foto_urls.length)}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
                       </div>
                     ))}
                     
-                    {formData.foto_urls.length + selectedFiles.length < 10 && (
+                    {profile?.role !== 'auditor' && formData.foto_urls.length + selectedFiles.length < 10 && (
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -1278,7 +1326,9 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       </button>
                     )}
                   </div>
-                  <p className="text-[10px] text-gray-500 italic">Maks 5MB per foto. Format: PNG, JPG, WEBP.</p>
+                  {profile?.role !== 'auditor' && (
+                    <p className="text-[10px] text-gray-500 italic">Maks 5MB per foto. Format: PNG, JPG, WEBP.</p>
+                  )}
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -1286,6 +1336,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     accept="image/*"
                     multiple
                     className="hidden"
+                    disabled={profile?.role === 'auditor'}
                   />
                 </div>
               </div>
@@ -1628,6 +1679,17 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     </div>
                   </div>
 
+                  {selectedItemForDetail.note_audit && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-1">Catatan Audit</h4>
+                      <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                        <p className="text-sm text-blue-800 leading-relaxed">
+                          {selectedItemForDetail.note_audit}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pt-4 border-t border-gray-100">
                     <div className="flex items-center text-xs text-gray-400">
                       <Calendar size={14} className="mr-1" />
@@ -1648,7 +1710,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
               >
                 Tutup
               </button>
-              {profile?.role === 'admin' ? (
+              {profile?.role === 'admin' || profile?.role === 'auditor' ? (
                 <button
                   onClick={() => {
                     setIsDetailModalOpen(false);
@@ -1656,7 +1718,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                   }}
                   className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
                 >
-                  Edit Barang
+                  {profile?.role === 'auditor' ? 'Audit Barang' : 'Edit Barang'}
                 </button>
               ) : (
                 <button
