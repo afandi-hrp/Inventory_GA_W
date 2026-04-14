@@ -7,7 +7,7 @@ import {
   Package, Image as ImageIcon, Upload, Download, X, Loader2, AlertCircle,
   FileSpreadsheet, CheckSquare, Square, MoreHorizontal,
   ArrowUpDown, ChevronUp, ChevronDown, Info, Calendar, MapPin, Hash,
-  LogOut, History, ClipboardList, Archive, XCircle
+  LogOut, History, ClipboardList, Archive, XCircle, Camera
 } from 'lucide-react';
 import { Item } from '../../types';
 import { clsx, type ClassValue } from 'clsx';
@@ -92,6 +92,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1287,16 +1288,6 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-gray-700">Foto Barang ({formData.foto_urls.length + selectedFiles.length}/10)</label>
-                    {profile?.role !== 'auditor' && (
-                      <button 
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={formData.foto_urls.length + selectedFiles.length >= 10}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400"
-                      >
-                        + Tambah Foto
-                      </button>
-                    )}
                   </div>
                   
                   <div className="grid grid-cols-3 gap-2">
@@ -1316,25 +1307,46 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     ))}
                     
                     {profile?.role !== 'auditor' && formData.foto_urls.length + selectedFiles.length < 10 && (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-gray-50 transition-all"
-                      >
-                        <Upload size={20} />
-                        <span className="text-[10px] mt-1">Upload</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => cameraInputRef.current?.click()}
+                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                        >
+                          <Camera size={20} />
+                          <span className="text-[10px] mt-1 font-medium">Kamera</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                        >
+                          <ImageIcon size={20} />
+                          <span className="text-[10px] mt-1 font-medium">Galeri</span>
+                        </button>
+                      </>
                     )}
                   </div>
                   {profile?.role !== 'auditor' && (
                     <p className="text-[10px] text-gray-500 italic">Maks 5MB per foto. Format: PNG, JPG, WEBP.</p>
                   )}
+                  {/* Hidden input for Gallery (Multiple) */}
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept="image/*"
                     multiple
+                    className="hidden"
+                    disabled={profile?.role === 'auditor'}
+                  />
+                  {/* Hidden input for Camera (Single, direct to camera) */}
+                  <input
+                    type="file"
+                    ref={cameraInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    capture="environment"
                     className="hidden"
                     disabled={profile?.role === 'auditor'}
                   />
