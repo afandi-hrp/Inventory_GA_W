@@ -85,39 +85,12 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col md:flex-row">
-      {/* Left Side: Background Image/Video */}
-      <div className="hidden md:block md:w-1/2 relative transition-all duration-500 overflow-hidden">
-        {settings.login_bg_url && (settings.login_bg_url.match(/\.(mp4|webm|ogg|mov)$|video/i) || settings.login_bg_url.includes('video')) ? (
-          <video 
-            src={settings.login_bg_url} 
-            autoPlay 
-            muted 
-            loop 
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div 
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${settings.login_bg_url})` }}
-          />
-        )}
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-12">
-          <div className="text-white max-w-md">
-            <h1 className="text-5xl font-bold mb-4">{settings.login_title}</h1>
-            <p className="text-xl opacity-90">{settings.login_footer}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Side: Login Form */}
-      <div className="flex-1 flex flex-col justify-center items-center p-8 bg-gradient-to-br from-[#FFF9E3] via-[#FFDAB9] to-[#FFB08E]">
-        <div className="w-full max-w-md bg-white/40 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/50 relative overflow-hidden">
-          {/* Glassmorphism shine effect */}
-          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
-          
-          <div className="flex flex-col items-center mb-8 relative z-10">
+    <div className="min-h-[100dvh] flex flex-col justify-center items-center p-8 bg-gradient-to-br from-[#FFF9E3] via-[#FFDAB9] to-[#FFB08E]">
+      <div className="w-full max-w-md bg-white/40 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/50 relative overflow-hidden">
+        {/* Glassmorphism shine effect */}
+        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+        
+        <div className="flex flex-col items-center mb-8 relative z-10">
             <div className="w-16 h-16 bg-blue-600/90 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4 text-white shadow-lg border border-blue-400/30">
               <LogIn size={32} />
             </div>
@@ -240,7 +213,6 @@ export default function Login() {
         <div className="mt-8 text-center text-gray-600 text-sm font-medium">
           <p>{settings.login_footer}</p>
         </div>
-      </div>
     </div>
   );
 }

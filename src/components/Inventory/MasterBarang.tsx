@@ -322,7 +322,38 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     }
   };
 
-  const handleOpenModal = (item?: Item) => {
+  const generateNextKodeBarang = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('kode_barang')
+        .ilike('kode_barang', 'BRG-%');
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        return 'BRG-1';
+      }
+
+      let maxNumber = 0;
+      data.forEach(item => {
+        const match = item.kode_barang.match(/^BRG-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) {
+            maxNumber = num;
+          }
+        }
+      });
+
+      return `BRG-${maxNumber + 1}`;
+    } catch (err) {
+      console.error('Error generating next kode_barang:', err);
+      return `BRG-${Math.floor(10000 + Math.random() * 90000)}`;
+    }
+  };
+
+  const handleOpenModal = async (item?: Item) => {
     if (profile?.role !== 'admin' && profile?.role !== 'auditor') {
       showToast('Akses Ditolak: Anda tidak memiliki izin untuk melakukan aksi ini', 'error');
       return;
@@ -346,8 +377,9 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       setPreviewUrls(item.foto_urls || []);
     } else {
       setEditingItem(null);
+      const nextKode = await generateNextKodeBarang();
       setFormData({
-        kode_barang: `BRG-${Math.floor(10000 + Math.random() * 90000)}`,
+        kode_barang: nextKode,
         nama_barang: '',
         jumlah_barang: 0,
         kode_lokasi: '',
