@@ -91,6 +91,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   });
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -560,24 +561,94 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     );
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1920;
+          const MAX_HEIGHT = 1920;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file); // Fallback to original if compression fails
+            }
+          }, 'image/jpeg', 0.9); // 90% quality
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
     if (files.length > 0) {
-      const totalPhotos = formData.foto_urls.length + selectedFiles.length + files.length;
-      if (totalPhotos > 10) {
-        showToast('Maksimal 10 foto per barang', 'error');
-        return;
-      }
+      setIsProcessingImages(true);
+      
+      try {
+        const totalPhotos = formData.foto_urls.length + selectedFiles.length + files.length;
+        if (totalPhotos > 10) {
+          showToast('Maksimal 10 foto per barang', 'error');
+          return;
+        }
 
-      const oversizedFiles = files.filter(f => f.size > 5 * 1024 * 1024);
-      if (oversizedFiles.length > 0) {
-        showToast('Beberapa file terlalu besar (Maks 5MB per foto)', 'error');
-        return;
-      }
+        const oversizedFiles = files.filter(f => f.size > 10 * 1024 * 1024); // Increased to 10MB before compression
+        if (oversizedFiles.length > 0) {
+          showToast('Beberapa file terlalu besar (Maks 10MB per foto)', 'error');
+          return;
+        }
 
-      setSelectedFiles(prev => [...prev, ...files]);
-      const newPreviews = files.map(f => URL.createObjectURL(f));
-      setPreviewUrls(prev => [...prev, ...newPreviews]);
+        // Compress images
+        const compressedFiles = await Promise.all(
+          files.map(async (file) => {
+            if (file.type.startsWith('image/')) {
+              return await compressImage(file);
+            }
+            return file;
+          })
+        );
+
+        setSelectedFiles(prev => [...prev, ...compressedFiles]);
+        const newPreviews = compressedFiles.map(f => URL.createObjectURL(f));
+        setPreviewUrls(prev => [...prev, ...newPreviews]);
+      } catch (error) {
+        console.error('Error processing images:', error);
+        showToast('Gagal memproses gambar', 'error');
+      } finally {
+        setIsProcessingImages(false);
+        // Reset input value so the same file can be selected again if needed
+        if (e.target) e.target.value = '';
+      }
     }
   };
 
@@ -1311,18 +1382,20 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         <button
                           type="button"
                           onClick={() => cameraInputRef.current?.click()}
-                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                          disabled={isProcessingImages}
+                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Camera size={20} />
-                          <span className="text-[10px] mt-1 font-medium">Kamera</span>
+                          {isProcessingImages ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+                          <span className="text-[10px] mt-1 font-medium">{isProcessingImages ? 'Memproses...' : 'Kamera'}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                          disabled={isProcessingImages}
+                          className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <ImageIcon size={20} />
-                          <span className="text-[10px] mt-1 font-medium">Galeri</span>
+                          {isProcessingImages ? <Loader2 size={20} className="animate-spin" /> : <ImageIcon size={20} />}
+                          <span className="text-[10px] mt-1 font-medium">{isProcessingImages ? 'Memproses...' : 'Galeri'}</span>
                         </button>
                       </>
                     )}
@@ -1363,11 +1436,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                 </button>
                 <button
                   type="submit"
-                  disabled={formLoading}
+                  disabled={formLoading || isProcessingImages}
                   className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-all shadow-sm font-medium disabled:opacity-50"
                 >
-                  {formLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                  <span>{formLoading ? (uploadingPhoto ? 'Mengunggah Foto...' : 'Menyimpan...') : (editingItem ? 'Simpan Perubahan' : 'Tambah Barang')}</span>
+                  {formLoading || isProcessingImages ? <Loader2 className="animate-spin" size={18} /> : null}
+                  <span>{isProcessingImages ? 'Memproses Foto...' : formLoading ? (uploadingPhoto ? 'Mengunggah Foto...' : 'Menyimpan...') : (editingItem ? 'Simpan Perubahan' : 'Tambah Barang')}</span>
                 </button>
               </div>
             </form>
