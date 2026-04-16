@@ -25,9 +25,11 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
   const { profile } = useAuth();
   const { settings } = useSettings();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const location = useLocation();
   const currentPath = location.pathname.replace('/', '') || 'dashboard';
+
+  const isExpanded = isHovered || isSidebarOpen;
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
@@ -94,12 +96,18 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
         />
       )}
 
+      {/* Desktop Sidebar Placeholder */}
+      <div className="hidden lg:block w-20 shrink-0 m-4" />
+
       {/* Sidebar */}
-      <aside className={cn(
-        "fixed z-50 bg-[#3D2C44]/95 backdrop-blur-xl text-white transition-all duration-300 transform lg:translate-x-0 lg:static",
-        isSidebarOpen ? "translate-x-0 inset-y-0 left-0" : "-translate-x-full inset-y-0 left-0",
-        isCollapsed ? "w-20" : "w-64",
-        "lg:m-4 lg:rounded-3xl lg:h-[calc(100vh-2rem)] shadow-2xl flex flex-col overflow-hidden border border-white/10"
+      <aside 
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={cn(
+        "fixed z-50 bg-[#3D2C44]/95 backdrop-blur-xl text-white transition-all duration-300 transform",
+        isSidebarOpen ? "translate-x-0 inset-y-0 left-0" : "-translate-x-full inset-y-0 left-0 lg:translate-x-0",
+        isExpanded ? "w-64" : "w-20",
+        "lg:left-0 lg:top-0 lg:m-4 lg:rounded-3xl lg:h-[calc(100vh-2rem)] shadow-2xl flex flex-col overflow-hidden border border-white/10"
       )}>
         <div className="h-full flex flex-col relative z-10">
           {/* Sidebar Header */}
@@ -108,19 +116,11 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
               <div className="w-10 h-10 shrink-0 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center font-bold text-xl shadow-lg border border-white/20">
                 {settings.login_title.charAt(0)}
               </div>
-              {!isCollapsed && (
+              {isExpanded && (
                 <span className="font-bold text-lg truncate tracking-wide animate-in fade-in duration-300">{settings.login_title}</span>
               )}
             </div>
           </div>
-
-          {/* Toggle Button (Desktop) */}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex absolute top-6 -right-3 w-6 h-6 bg-white text-[#3D2C44] rounded-full items-center justify-center shadow-md z-50 hover:scale-110 transition-transform"
-          >
-            {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-          </button>
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-hide relative">
@@ -134,10 +134,10 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
                     setIsSidebarOpen(false);
                     if (setHistorySearch) setHistorySearch('');
                   }}
-                  title={isCollapsed ? item.label : undefined}
+                  title={!isExpanded ? item.label : undefined}
                   className={cn(
                     "w-full flex items-center px-4 py-3 rounded-2xl transition-colors duration-200 relative group",
-                    isCollapsed ? "justify-center" : "space-x-3",
+                    !isExpanded ? "justify-center" : "space-x-3",
                     isActive 
                       ? "text-white" 
                       : "text-gray-400 hover:text-white"
@@ -151,9 +151,9 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     />
                   )}
-                  <div className={cn("relative z-10 flex items-center", isCollapsed ? "" : "space-x-3")}>
+                  <div className={cn("relative z-10 flex items-center", !isExpanded ? "" : "space-x-3")}>
                     <div className="shrink-0">{item.icon}</div>
-                    {!isCollapsed && <span className="font-medium whitespace-nowrap">{item.label}</span>}
+                    {isExpanded && <span className="font-medium whitespace-nowrap">{item.label}</span>}
                   </div>
                 </Link>
               );
@@ -165,7 +165,7 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
             {/* User Info */}
             <div className={cn(
               "flex items-center p-3 rounded-2xl bg-white/5 border border-white/10 transition-all",
-              isCollapsed ? "justify-center" : "space-x-3"
+              !isExpanded ? "justify-center" : "space-x-3"
             )}>
               <div className="w-10 h-10 rounded-full bg-white/20 border border-white/30 flex items-center justify-center overflow-hidden shrink-0">
                 {profile?.avatar_url ? (
@@ -174,7 +174,7 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
                   <UserIcon size={20} className="text-white/70" />
                 )}
               </div>
-              {!isCollapsed && (
+              {isExpanded && (
                 <div className="overflow-hidden">
                   <p className="text-sm font-bold text-white truncate">{profile?.full_name || 'User'}</p>
                   <p className="text-xs text-white/60 capitalize truncate">{profile?.role || 'User'}</p>
@@ -184,14 +184,14 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
 
             <button 
               onClick={handleLogout}
-              title={isCollapsed ? "Logout" : undefined}
+              title={!isExpanded ? "Logout" : undefined}
               className={cn(
                 "w-full flex items-center px-4 py-3 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all duration-200 group",
-                isCollapsed ? "justify-center" : "space-x-3"
+                !isExpanded ? "justify-center" : "space-x-3"
               )}
             >
               <LogOut size={20} className="shrink-0 group-hover:scale-110 transition-transform" />
-              {!isCollapsed && <span className="font-medium whitespace-nowrap">Logout</span>}
+              {isExpanded && <span className="font-medium whitespace-nowrap">Logout</span>}
             </button>
           </div>
         </div>

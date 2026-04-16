@@ -94,6 +94,36 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const topScrollbarRef = useRef<HTMLDivElement>(null);
+  const [tableContentWidth, setTableContentWidth] = useState(0);
+
+  useEffect(() => {
+    if (!tableContainerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (tableContainerRef.current) {
+        setTableContentWidth(tableContainerRef.current.scrollWidth);
+      }
+    });
+    observer.observe(tableContainerRef.current);
+    const table = tableContainerRef.current.querySelector('table');
+    if (table) observer.observe(table);
+    
+    return () => observer.disconnect();
+  }, [items]);
+
+  const handleTopScroll = () => {
+    if (topScrollbarRef.current && tableContainerRef.current) {
+      tableContainerRef.current.scrollLeft = topScrollbarRef.current.scrollLeft;
+    }
+  };
+
+  const handleBottomScroll = () => {
+    if (topScrollbarRef.current && tableContainerRef.current) {
+      topScrollbarRef.current.scrollLeft = tableContainerRef.current.scrollLeft;
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1005,9 +1035,22 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         </button>
       </div>
 
+      {/* Top Scrollbar */}
+      <div 
+        className="overflow-x-auto overflow-y-hidden mb-2 rounded-xl bg-white/40 backdrop-blur-sm border border-white/50 shadow-sm custom-scrollbar"
+        ref={topScrollbarRef}
+        onScroll={handleTopScroll}
+      >
+        <div style={{ width: tableContentWidth, height: '1px' }} />
+      </div>
+
       {/* Table */}
       <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-lg border border-white/50 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div 
+          className="overflow-x-auto custom-scrollbar"
+          ref={tableContainerRef}
+          onScroll={handleBottomScroll}
+        >
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
@@ -1101,7 +1144,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       </button>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex -space-x-3 overflow-hidden">
+                      <div className="flex -space-x-6 overflow-hidden py-2">
                         {item.foto_urls && item.foto_urls.length > 0 ? (
                           <>
                             {item.foto_urls.slice(0, 3).map((url, idx) => (
@@ -1109,7 +1152,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                                 key={idx}
                                 src={url} 
                                 alt={`${item.nama_barang} ${idx + 1}`} 
-                                className="w-10 h-10 rounded-lg object-cover border-2 border-white shadow-sm cursor-zoom-in hover:z-10 transition-transform hover:scale-110" 
+                                className="w-20 h-20 shrink-0 rounded-xl object-cover border-2 border-white shadow-md cursor-zoom-in hover:z-10 transition-transform hover:scale-110" 
                                 referrerPolicy="no-referrer"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1118,14 +1161,14 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                               />
                             ))}
                             {item.foto_urls.length > 3 && (
-                              <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-gray-500 shadow-sm">
+                              <div className="w-20 h-20 shrink-0 rounded-xl bg-gray-100 border-2 border-white flex items-center justify-center text-sm font-bold text-gray-500 shadow-md">
                                 +{item.foto_urls.length - 3}
                               </div>
                             )}
                           </>
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 border border-gray-100">
-                            <ImageIcon size={18} />
+                          <div className="w-20 h-20 shrink-0 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 border border-gray-100 shadow-sm">
+                            <ImageIcon size={32} />
                           </div>
                         )}
                       </div>
@@ -1154,7 +1197,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       <div className="text-xs text-gray-500 truncate max-w-[150px]">{item.note_audit || '-'}</div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end space-x-2">
+                      <div className="grid grid-cols-2 gap-1 w-max ml-auto">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1163,7 +1206,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                               navigate('/log-item-change');
                             }
                           }}
-                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center"
                           title="Lihat Riwayat"
                         >
                           <History size={18} />
@@ -1177,7 +1220,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                                     e.stopPropagation();
                                     handleStockOut(item);
                                   }}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
                                   title="Keluarkan Barang"
                                 >
                                   <Archive size={18} />
@@ -1187,7 +1230,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                                     e.stopPropagation();
                                     handleTakeItem(item);
                                   }}
-                                  className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors flex items-center justify-center"
                                   title="Ambil Barang"
                                 >
                                   <LogOut size={18} />
@@ -1199,7 +1242,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                                 e.stopPropagation();
                                 handleOpenModal(item);
                               }}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center"
                               title="Edit"
                             >
                               <Edit2 size={18} />

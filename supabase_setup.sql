@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS items (
   nama_barang TEXT NOT NULL,
   jumlah_barang INTEGER DEFAULT 0,
   lokasi TEXT,
+  kode_lokasi TEXT,
   foto_urls TEXT[] DEFAULT '{}',
   deskripsi TEXT,
+  note_audit TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
@@ -39,6 +41,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='items' AND column_name='foto_url') THEN
         UPDATE items SET foto_urls = ARRAY[foto_url] WHERE foto_url IS NOT NULL AND (foto_urls IS NULL OR foto_urls = '{}');
         ALTER TABLE items DROP COLUMN foto_url;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='items' AND column_name='kode_lokasi') THEN
+        ALTER TABLE items ADD COLUMN kode_lokasi TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='items' AND column_name='note_audit') THEN
+        ALTER TABLE items ADD COLUMN note_audit TEXT;
     END IF;
 END $$;
 
@@ -183,6 +193,11 @@ CREATE OR REPLACE FUNCTION public.log_item_changes()
 RETURNS TRIGGER AS $$
 BEGIN
   IF (TG_OP = 'UPDATE') THEN
+    -- Skip logging if only note_audit and updated_at were changed
+    IF (to_jsonb(OLD) - 'note_audit' - 'updated_at') = (to_jsonb(NEW) - 'note_audit' - 'updated_at') THEN
+      RETURN NULL;
+    END IF;
+
     INSERT INTO public.item_audit_logs (item_id, action, old_values, new_values, changed_by)
     VALUES (
       NEW.id,
