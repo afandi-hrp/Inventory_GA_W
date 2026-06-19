@@ -6,6 +6,7 @@ import Layout from './components/Dashboard/Layout';
 import DashboardHome from './components/Dashboard/Home';
 import MasterBarang from './components/Inventory/MasterBarang';
 import MasterLokasi from './components/Inventory/MasterLokasi';
+import MasterKategori from './components/Inventory/MasterKategori';
 import TakeItemHistory from './components/Inventory/TakeItemHistory';
 import LogItemChange from './components/Inventory/LogItemChange';
 import StockOutHistory from './components/Inventory/StockOutHistory';
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardHome />} />
             <Route path="/barang" element={<MasterBarang setHistorySearch={setHistorySearch} />} />
             <Route path="/lokasi" element={<MasterLokasi setHistorySearch={setHistorySearch} />} />
+            <Route path="/kategori" element={<MasterKategori />} />
             <Route path="/take-item-history" element={<TakeItemHistory initialSearch={historySearch} />} />
             <Route path="/log-item-change" element={<LogItemChange initialSearch={historySearch} />} />
             <Route path="/stock-out-history" element={<StockOutHistory setHistorySearch={setHistorySearch} />} />

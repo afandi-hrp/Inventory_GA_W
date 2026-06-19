@@ -138,7 +138,8 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
       'Tanggal Keluar': new Date(entry.tanggal_keluar).toLocaleString('id-ID'),
       'Kode Barang': entry.kode_barang,
       'Nama Barang': entry.nama_barang,
-      'Lokasi Terakhir': entry.master_lokasi?.nama_lokasi || entry.kode_lokasi || '-',
+      'Lokasi Asal': entry.nama_lokasi || entry.master_lokasi?.nama_lokasi || entry.kode_lokasi || '-',
+      'Lokasi Keluar': entry.lokasi_keluar || '-',
       'Jumlah': entry.jumlah_barang,
       'Oleh': entry.user_name,
       'Alasan': entry.keterangan_alasan || '-'
@@ -348,7 +349,8 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                 </th>
                 <th className="px-6 py-4">Kode</th>
                 <th className="px-6 py-4">Nama Barang</th>
-                <th className="px-6 py-4">Lokasi</th>
+                <th className="px-6 py-4">Lokasi Asal</th>
+                <th className="px-6 py-4">Lokasi Keluar</th>
                 <th className="px-6 py-4">Jumlah</th>
                 <th className="px-6 py-4">Alasan</th>
                 <th className="px-6 py-4 text-right">Detail</th>
@@ -357,14 +359,14 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                     <p className="text-gray-500">Memuat riwayat...</p>
                   </td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <Package className="mx-auto text-gray-300 mb-2" size={48} />
                     <p className="text-gray-500">Tidak ada riwayat ditemukan</p>
                   </td>
@@ -389,6 +391,11 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                         {entry.nama_lokasi || entry.master_lokasi?.nama_lokasi || entry.kode_lokasi || '-'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                        {entry.lokasi_keluar || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-900">{entry.jumlah_barang}</td>
@@ -542,8 +549,12 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
                         <span className="text-sm font-medium text-gray-900">{selectedEntry.nama_barang}</span>
                       </div>
                       <div className="flex justify-between py-2 border-b border-gray-50">
-                        <span className="text-sm text-gray-500">Lokasi Terakhir</span>
+                        <span className="text-sm text-gray-500">Lokasi Asal</span>
                         <span className="text-sm font-medium text-gray-900">{selectedEntry.nama_lokasi || selectedEntry.master_lokasi?.nama_lokasi || selectedEntry.kode_lokasi || '-'}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-gray-50">
+                        <span className="text-sm text-gray-500">Lokasi Keluar</span>
+                        <span className="text-sm font-bold text-orange-600 bg-orange-50 px-2 rounded">{selectedEntry.lokasi_keluar || '-'}</span>
                       </div>
                       <div className="flex justify-between py-2 border-b border-gray-50">
                         <span className="text-sm text-gray-500">Jumlah</span>

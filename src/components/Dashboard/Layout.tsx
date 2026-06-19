@@ -6,7 +6,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, MapPin, LogOut, Menu, X, 
   Bell, User as UserIcon, ChevronRight, ChevronLeft, History, ClipboardList, Archive,
-  Settings, Users
+  Settings, Users, Layers
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -34,6 +34,7 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'barang', label: 'Master Barang', icon: <Package size={20} /> },
+    { id: 'kategori', label: 'Master Kategori', icon: <Layers size={20} /> },
     { id: 'lokasi', label: 'Master Lokasi', icon: <MapPin size={20} /> },
     { id: 'take-item-history', label: 'Take Item History', icon: <History size={20} /> },
     { id: 'log-item-change', label: 'Log Item Change', icon: <ClipboardList size={20} /> },

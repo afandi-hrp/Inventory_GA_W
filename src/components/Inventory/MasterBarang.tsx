@@ -71,7 +71,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     nama_barang: '',
     jumlah_barang: 0,
     kode_lokasi: '',
+    kategori_id: '',
     deskripsi: '',
+    kelengkapan_garansi: false,
+    kelengkapan_sertifikat: false,
+    kelengkapan_manual: false,
     note_audit: '',
     foto_urls: [] as string[],
   });
@@ -83,7 +87,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
   const [stockOutData, setStockOutData] = useState({
     alasan: '',
+    lokasi_keluar: '',
   });
+
+  const [categories, setCategories] = useState<any[]>([]);
+  const [filterKategori, setFilterKategori] = useState('');
 
   const [bulkEditData, setBulkEditData] = useState({
     kode_lokasi: '',
@@ -95,6 +103,16 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
+  // Stats States
+  const [categoryStats, setCategoryStats] = useState<{
+    id: string, 
+    name: string, 
+    count: number, 
+    stock: number, 
+    locations: {name: string, kode: string, count: number, stock: number}[]
+  }[]>([]);
+  const [selectedTopCategory, setSelectedTopCategory] = useState<string | null>(null);
+
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const topScrollbarRef = useRef<HTMLDivElement>(null);
   const [tableContentWidth, setTableContentWidth] = useState(0);
@@ -137,13 +155,29 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       console.log('Current User Profile:', profile);
     }
     fetchItems();
-  }, [page, debouncedSearch, filterLokasi, itemsPerPage, profile, sortColumn, sortOrder]);
+    fetchCategories();
+  }, [page, debouncedSearch, filterLokasi, filterKategori, itemsPerPage, profile, sortColumn, sortOrder]);
 
-  async function fetchAvailableLocations() {
+  async function fetchCategories() {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('nama_kategori');
+      if (error) throw error;
+      if (data) {
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  }
+
+  async function fetchStatsAndLocations() {
     try {
       const [locRes, itemsRes] = await Promise.all([
         supabase.from('master_lokasi').select('*').order('nama_lokasi'),
-        supabase.from('items').select('kode_lokasi, jumlah_barang, master_lokasi(nama_lokasi)')
+        supabase.from('items').select('kategori_id, kode_lokasi, jumlah_barang, master_lokasi(nama_lokasi), categories(nama_kategori)')
       ]);
       
       if (locRes.error) throw locRes.error;
@@ -154,23 +188,42 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       }
 
       if (itemsRes.data) {
-        const statsMap: Record<string, { count: number, stock: number }> = {};
+        const catMap: Record<string, {
+          id: string, 
+          name: string, 
+          count: number, 
+          stock: number, 
+          locs: Record<string, {kode: string, name: string, count: number, stock: number}>
+        }> = {};
+
         itemsRes.data.forEach(item => {
-          const locName = (item as any).master_lokasi?.nama_lokasi || item.kode_lokasi || 'Tanpa Lokasi';
-          if (!statsMap[locName]) {
-            statsMap[locName] = { count: 0, stock: 0 };
+          const catId = item.kategori_id || 'unassigned';
+          const catName = (item as any).categories?.nama_kategori || 'Tanpa Kategori';
+          const locKode = item.kode_lokasi || 'unassigned';
+          const locName = (item as any).master_lokasi?.nama_lokasi || locKode || 'Tanpa Lokasi';
+          
+          if (!catMap[catId]) {
+            catMap[catId] = { id: catId, name: catName, count: 0, stock: 0, locs: {} };
           }
-          statsMap[locName].count += 1;
-          statsMap[locName].stock += (item.jumlah_barang || 0);
+          catMap[catId].count += 1;
+          catMap[catId].stock += (item.jumlah_barang || 0);
+
+          if (!catMap[catId].locs[locKode]) {
+            catMap[catId].locs[locKode] = { kode: locKode, name: locName, count: 0, stock: 0 };
+          }
+          catMap[catId].locs[locKode].count += 1;
+          catMap[catId].locs[locKode].stock += (item.jumlah_barang || 0);
         });
         
-        const statsArray = Object.entries(statsMap).map(([name, stats]) => ({
-          name,
-          count: stats.count,
-          stock: stats.stock
+        const catArray = Object.values(catMap).map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          count: cat.count,
+          stock: cat.stock,
+          locations: Object.values(cat.locs).sort((a,b) => b.count - a.count)
         })).sort((a, b) => b.count - a.count);
         
-        setLocationStats(statsArray);
+        setCategoryStats(catArray);
       }
     } catch (err) {
       console.error('Error fetching locations:', err);
@@ -186,6 +239,9 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
           *,
           master_lokasi (
             nama_lokasi
+          ),
+          categories (
+            nama_kategori
           )
         `, { count: 'exact' });
 
@@ -195,6 +251,10 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
       if (filterLokasi) {
         query = query.eq('kode_lokasi', filterLokasi);
+      }
+
+      if (filterKategori) {
+        query = query.eq('kategori_id', filterKategori);
       }
 
       const from = (page - 1) * itemsPerPage;
@@ -210,7 +270,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       setSelectedItems([]); // Clear selection on page change
       
       // Refresh locations
-      fetchAvailableLocations();
+      fetchStatsAndLocations();
     } catch (err) {
       console.error('Error fetching items:', err);
     } finally {
@@ -245,7 +305,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
   const handleStockOut = (item: Item) => {
     setSelectedItemForStockOut(item);
-    setStockOutData({ alasan: '' });
+    setStockOutData({ alasan: '', lokasi_keluar: '' });
     setIsStockOutModalOpen(true);
   };
 
@@ -322,6 +382,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
           jumlah_barang: selectedItemForStockOut.jumlah_barang,
           kode_lokasi: selectedItemForStockOut.kode_lokasi,
           nama_lokasi: locationName,
+          lokasi_keluar: stockOutData.lokasi_keluar,
           foto_urls: selectedItemForStockOut.foto_urls,
           deskripsi: selectedItemForStockOut.deskripsi,
           created_at: selectedItemForStockOut.created_at,
@@ -400,7 +461,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         nama_barang: item.nama_barang,
         jumlah_barang: item.jumlah_barang,
         kode_lokasi: item.kode_lokasi || '',
+        kategori_id: item.kategori_id || '',
         deskripsi: item.deskripsi || '',
+        kelengkapan_garansi: item.kelengkapan_garansi || false,
+        kelengkapan_sertifikat: item.kelengkapan_sertifikat || false,
+        kelengkapan_manual: item.kelengkapan_manual || false,
         note_audit: item.note_audit || '',
         foto_urls: item.foto_urls || [],
       });
@@ -413,7 +478,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         nama_barang: '',
         jumlah_barang: 0,
         kode_lokasi: '',
+        kategori_id: '',
         deskripsi: '',
+        kelengkapan_garansi: false,
+        kelengkapan_sertifikat: false,
+        kelengkapan_manual: false,
         note_audit: '',
         foto_urls: [],
       });
@@ -516,6 +585,9 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         'Jumlah': item.jumlah_barang,
         'Lokasi': (item as any).master_lokasi?.nama_lokasi || '-',
         'Deskripsi': item.deskripsi || '-',
+        'Kelengkapan Garansi': item.kelengkapan_garansi ? 'Ya' : 'Tidak',
+        'Kelengkapan Sertifikat': item.kelengkapan_sertifikat ? 'Ya' : 'Tidak',
+        'Kelengkapan Manual Book': item.kelengkapan_manual ? 'Ya' : 'Tidak',
         'Tanggal Dibuat': new Date(item.created_at).toLocaleDateString('id-ID'),
       }));
 
@@ -767,6 +839,8 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
       let payload: any = {
         ...formData,
+        kategori_id: formData.kategori_id || null,
+        kode_lokasi: formData.kode_lokasi || null,
         foto_urls: finalFotoUrls,
         updated_at: new Date().toISOString(),
       };
@@ -786,7 +860,11 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             formData.nama_barang !== editingItem.nama_barang ||
             formData.jumlah_barang !== editingItem.jumlah_barang ||
             formData.kode_lokasi !== (editingItem.kode_lokasi || '') ||
+            formData.kategori_id !== (editingItem.kategori_id || '') ||
             formData.deskripsi !== (editingItem.deskripsi || '') ||
+            formData.kelengkapan_garansi !== (editingItem.kelengkapan_garansi || false) ||
+            formData.kelengkapan_sertifikat !== (editingItem.kelengkapan_sertifikat || false) ||
+            formData.kelengkapan_manual !== (editingItem.kelengkapan_manual || false) ||
             formData.note_audit !== (editingItem.note_audit || '') ||
             selectedFiles.length > 0 ||
             JSON.stringify(formData.foto_urls) !== JSON.stringify(editingItem.foto_urls || []));
@@ -845,6 +923,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         nama_barang: item.nama_barang,
         jumlah_barang: item.jumlah_barang,
         kode_lokasi: item.kode_lokasi,
+        lokasi_keluar: stockOutData.lokasi_keluar,
         foto_urls: item.foto_urls,
         deskripsi: item.deskripsi,
         created_at: item.created_at,
@@ -956,22 +1035,61 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         </div>
       )}
 
-      {/* Location Stats */}
-      {locationStats.length > 0 && (
-        <div className="max-h-[160px] overflow-y-auto pr-2 scrollbar-hide">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-500">
-            {locationStats.map((stat, idx) => (
-              <div key={idx} className="bg-white/40 backdrop-blur-xl p-4 rounded-3xl shadow-lg border border-white/60 flex items-center space-x-3 hover:border-blue-300 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => setFilterLokasi(availableLocations.find(l => l.nama_lokasi === stat.name)?.kode_lokasi || '')}>
-                <div className="p-2.5 rounded-2xl bg-white/50 text-blue-600 shrink-0 border border-white/50 shadow-inner group-hover:scale-110 transition-transform">
-                  <MapPin size={20} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-sm font-semibold text-gray-900 truncate" title={stat.name}>{stat.name}</h4>
-                  <p className="text-xs text-gray-600 truncate font-medium">{stat.count} Jenis • {stat.stock} Total Stok</p>
-                </div>
-              </div>
-            ))}
+      {/* Category Stats */}
+      {categoryStats.length > 0 && (
+        <div className="flex flex-col space-y-4">
+          <div className="max-h-[160px] overflow-y-auto pr-2 scrollbar-hide">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-500">
+              {categoryStats.map((stat, idx) => {
+                const isSelected = selectedTopCategory === stat.id;
+                return (
+                  <div 
+                    key={idx} 
+                    className={`bg-white/40 backdrop-blur-xl p-4 rounded-3xl shadow-lg border flex items-center space-x-3 transition-all cursor-pointer group ${isSelected ? 'border-orange-500 shadow-orange-500/20 ring-2 ring-orange-500/20' : 'border-white/60 hover:border-orange-300 hover:shadow-xl hover:-translate-y-1'}`}
+                    onClick={() => setSelectedTopCategory(isSelected ? null : stat.id)}
+                  >
+                    <div className={`p-2.5 rounded-2xl shrink-0 border shadow-inner group-hover:scale-110 transition-transform ${isSelected ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white/50 text-orange-600 border-white/50'}`}>
+                      <Package size={20} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className={`text-sm font-semibold truncate ${isSelected ? 'text-orange-900' : 'text-gray-900'}`} title={stat.name}>{stat.name}</h4>
+                      <p className="text-xs text-gray-600 truncate font-medium">{stat.count} Jenis • {stat.stock} Total Stok</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+          
+          {selectedTopCategory && (
+            <div className="animate-in slide-in-from-top-4 fade-in duration-300">
+              <div className="flex items-center space-x-2 mb-3">
+                <MapPin className="text-blue-600" size={18} />
+                <h3 className="text-sm font-semibold text-gray-800">Pilih Lokasi untuk Kategori {categoryStats.find(c => c.id === selectedTopCategory)?.name}</h3>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {categoryStats.find(c => c.id === selectedTopCategory)?.locations.map((loc, idx) => (
+                  <div 
+                    key={idx}
+                    className="bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex items-center space-x-3 group"
+                    onClick={() => {
+                      setFilterKategori(selectedTopCategory === 'unassigned' ? '' : selectedTopCategory);
+                      setFilterLokasi(loc.kode === 'unassigned' ? '' : loc.kode);
+                      setSelectedTopCategory(null); // menciut / hide
+                    }}
+                  >
+                    <div className="p-1.5 bg-gray-50 group-hover:bg-blue-100 rounded-lg text-gray-400 group-hover:text-blue-600 transition-colors">
+                      <MapPin size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-800">{loc.name}</h4>
+                      <p className="text-[10px] text-gray-500">{loc.count} Jenis • {loc.stock} Stok</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -995,37 +1113,70 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             </button>
           )}
         </div>
-        <div className="md:flex-1 flex items-center space-x-2 min-w-[180px] relative group">
-          <Filter className="text-gray-400" size={18} />
-          <div className="relative flex-1">
-            <select
-              value={filterLokasi}
-              onChange={(e) => setFilterLokasi(e.target.value)}
-              className="w-full pl-3 pr-10 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm appearance-none bg-white"
-            >
-              <option value="">Semua Lokasi</option>
-              {availableLocations.map((loc) => (
-                <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
-              ))}
-            </select>
-            {filterLokasi && (
-              <button 
-                onClick={() => setFilterLokasi('')}
-                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        <div className="md:flex-1 flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-2 min-w-[200px]">
+          <div className="relative flex-1 w-full flex items-center space-x-2">
+            <Filter className="text-gray-400" size={18} />
+            <div className="relative flex-1">
+              <select
+                value={filterKategori}
+                onChange={(e) => {
+                  setFilterKategori(e.target.value);
+                  setFilterLokasi('');
+                }}
+                className="w-full pl-3 pr-10 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm appearance-none bg-white font-medium"
               >
-                <X size={16} />
-              </button>
-            )}
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-              <ChevronRight size={16} className="rotate-90" />
+                <option value="">Semua Kategori</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.nama_kategori}</option>
+                ))}
+              </select>
+              {filterKategori && (
+                <button 
+                  onClick={() => { setFilterKategori(''); setFilterLokasi(''); }}
+                  className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={16} />
+                </button>
+              )}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <ChevronRight size={16} className="rotate-90" />
+              </div>
             </div>
           </div>
+          
+          {filterKategori && !filterLokasi && (
+            <div className="relative flex-1 w-full animate-in fade-in zoom-in duration-300">
+              <select
+                value={filterLokasi}
+                onChange={(e) => setFilterLokasi(e.target.value)}
+                className="w-full pl-3 pr-10 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50 text-blue-800 text-sm appearance-none font-medium text-center"
+              >
+                <option value="">-- Pilih Lokasi Kategori --</option>
+                {availableLocations.map((loc) => (
+                  <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {filterLokasi && (
+            <div className="flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg border border-blue-200 animate-in fade-in slide-in-from-left-4 max-w-[200px] shrink-0">
+              <MapPin size={14} className="mr-1.5 shrink-0 text-blue-600" />
+              <span className="text-sm font-semibold truncate">
+                {availableLocations.find(l => l.kode_lokasi === filterLokasi)?.nama_lokasi || 'Lokasi Terpilih'}
+              </span>
+              <button onClick={() => setFilterLokasi('')} className="ml-2 text-blue-400 hover:text-blue-800 shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+          )}
         </div>
         
         <button
           onClick={() => {
             setSearch('');
             setFilterLokasi('');
+            setFilterKategori('');
             setPage(1);
           }}
           className="flex items-center justify-center space-x-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-500/20 backdrop-blur-md rounded-lg transition-all text-sm font-medium whitespace-nowrap shadow-sm"
@@ -1100,6 +1251,8 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     )}
                   </div>
                 </th>
+                <th className="px-6 py-4">Kategori</th>
+                <th className="px-6 py-4">Kelengkapan Dokumen</th>
                 <th 
                   className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors group"
                   onClick={() => handleSort('jumlah_barang')}
@@ -1120,14 +1273,14 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
+                  <td colSpan={11} className="px-6 py-12 text-center">
                     <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                     <p className="text-gray-500">Memuat data...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
+                  <td colSpan={11} className="px-6 py-12 text-center">
                     <Package className="mx-auto text-gray-300 mb-2" size={48} />
                     <p className="text-gray-500">Tidak ada barang ditemukan</p>
                   </td>
@@ -1184,6 +1337,24 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
                         {(item as any).master_lokasi?.nama_lokasi || 'Unassigned'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-100">
+                        {(item as any).categories?.nama_kategori || 'Tanpa Kategori'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${item.kelengkapan_garansi ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                           Garansi
+                         </span>
+                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${item.kelengkapan_sertifikat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                           Sertifikat
+                         </span>
+                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${item.kelengkapan_manual ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                           Manual Book
+                         </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className={cn(
@@ -1390,19 +1561,68 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
                       <select
-                        required
                         disabled={profile?.role === 'auditor'}
-                        value={formData.kode_lokasi}
-                        onChange={(e) => setFormData({ ...formData, kode_lokasi: e.target.value })}
+                        value={formData.kategori_id}
+                        onChange={(e) => setFormData({ ...formData, kategori_id: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white disabled:opacity-60 disabled:bg-gray-50"
                       >
-                        <option value="">Pilih Lokasi</option>
-                        {availableLocations.map((loc) => (
-                          <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                        <option value="">Tanpa Kategori</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.nama_kategori}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi</label>
+                    <select
+                      required
+                      disabled={profile?.role === 'auditor'}
+                      value={formData.kode_lokasi}
+                      onChange={(e) => setFormData({ ...formData, kode_lokasi: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white disabled:opacity-60 disabled:bg-gray-50"
+                    >
+                      <option value="">Pilih Lokasi</option>
+                      {availableLocations.map((loc) => (
+                        <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Kelengkapan Dokumen</label>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kelengkapan_garansi}
+                          onChange={(e) => setFormData({ ...formData, kelengkapan_garansi: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-700">Garansi</span>
+                      </label>
+                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kelengkapan_sertifikat}
+                          onChange={(e) => setFormData({ ...formData, kelengkapan_sertifikat: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-700">Sertifikat</span>
+                      </label>
+                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kelengkapan_manual}
+                          onChange={(e) => setFormData({ ...formData, kelengkapan_manual: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-700">Manual Book</span>
+                      </label>
                     </div>
                   </div>
                   <div>
@@ -1807,8 +2027,17 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Lokasi & Stok</h4>
+                    <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Lokasi & Kategori & Stok</h4>
                     <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+                          <Package size={18} />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Kategori</p>
+                          <p className="text-sm font-medium text-gray-700">{(selectedItemForDetail as any).categories?.nama_kategori || 'Tanpa Kategori'}</p>
+                        </div>
+                      </div>
                       <div className="flex items-start space-x-3">
                         <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                           <MapPin size={18} />
@@ -1819,7 +2048,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         </div>
                       </div>
                       <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                           <Info size={18} />
                         </div>
                         <div>
@@ -1836,6 +2065,21 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       <p className="text-sm text-gray-600 leading-relaxed">
                         {selectedItemForDetail.deskripsi || 'Tidak ada deskripsi tambahan untuk barang ini.'}
                       </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Kelengkapan Dokumen</h4>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_garansi ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                         Garansi: {selectedItemForDetail.kelengkapan_garansi ? 'Ada' : 'Tidak Ada'}
+                       </span>
+                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_sertifikat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                         Sertifikat: {selectedItemForDetail.kelengkapan_sertifikat ? 'Ada' : 'Tidak Ada'}
+                       </span>
+                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_manual ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                         Manual Book: {selectedItemForDetail.kelengkapan_manual ? 'Ada' : 'Tidak Ada'}
+                       </span>
                     </div>
                   </div>
 
@@ -2023,16 +2267,32 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
               </div>
 
               {/* Input Field */}
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar <span className="text-red-500">*</span></label>
-                <textarea
-                  required
-                  rows={3}
-                  value={stockOutData.alasan}
-                  onChange={(e) => setStockOutData({ alasan: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="Contoh: Barang Rusak, Hibah, Pindah Lokasi Permanen, dll."
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Lokasi Tujuan / Barang Keluar <span className="text-red-500">*</span></label>
+                  <select
+                    required
+                    value={stockOutData.lokasi_keluar}
+                    onChange={(e) => setStockOutData({ ...stockOutData, lokasi_keluar: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="">Pilih Lokasi</option>
+                    {availableLocations.map((loc) => (
+                      <option key={loc.kode_lokasi} value={loc.nama_lokasi}>{loc.nama_lokasi}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar <span className="text-red-500">*</span></label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={stockOutData.alasan}
+                    onChange={(e) => setStockOutData({ ...stockOutData, alasan: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Contoh: Barang Rusak, Hibah, Pindah Lokasi Permanen, dll."
+                  />
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50/50">
@@ -2086,16 +2346,32 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar Massal <span className="text-red-500">*</span></label>
-                <textarea
-                  required
-                  rows={3}
-                  value={stockOutData.alasan}
-                  onChange={(e) => setStockOutData({ alasan: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="Contoh: Pembersihan Gudang, Hibah Massal, dll."
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Lokasi Tujuan / Barang Keluar <span className="text-red-500">*</span></label>
+                  <select
+                    required
+                    value={stockOutData.lokasi_keluar}
+                    onChange={(e) => setStockOutData({ ...stockOutData, lokasi_keluar: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="">Pilih Lokasi</option>
+                    {availableLocations.map((loc) => (
+                      <option key={loc.kode_lokasi} value={loc.nama_lokasi}>{loc.nama_lokasi}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Keluar Massal <span className="text-red-500">*</span></label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={stockOutData.alasan}
+                    onChange={(e) => setStockOutData({ ...stockOutData, alasan: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Contoh: Pembersihan Gudang, Hibah Massal, dll."
+                  />
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50/50">

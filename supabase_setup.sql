@@ -16,6 +16,14 @@ CREATE TABLE IF NOT EXISTS locations (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nama_kategori TEXT NOT NULL UNIQUE,
+  deskripsi TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   kode_barang TEXT UNIQUE NOT NULL,
@@ -49,6 +57,14 @@ BEGIN
 
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='items' AND column_name='note_audit') THEN
         ALTER TABLE items ADD COLUMN note_audit TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='items' AND column_name='kategori_id') THEN
+        ALTER TABLE items ADD COLUMN kategori_id UUID REFERENCES categories(id);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='stock_keluar_history' AND column_name='lokasi_keluar') THEN
+        ALTER TABLE stock_keluar_history ADD COLUMN lokasi_keluar TEXT;
     END IF;
 END $$;
 
@@ -131,6 +147,11 @@ CREATE POLICY "Users can update own profile." ON profiles FOR UPDATE USING (auth
 -- Locations
 CREATE POLICY "Authenticated users can view locations" ON locations FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Admins can manage locations" ON locations FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Categories
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can view categories" ON categories FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins can manage categories" ON categories FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
 
 -- Items
 CREATE POLICY "Authenticated users can view items" ON items FOR SELECT TO authenticated USING (true);
