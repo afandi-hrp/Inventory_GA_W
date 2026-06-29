@@ -24,7 +24,8 @@ export default function MasterKategori() {
 
   const [formData, setFormData] = useState({
     nama_kategori: '',
-    deskripsi: ''
+    deskripsi: '',
+    parent_id: ''
   });
 
   useEffect(() => {
@@ -65,11 +66,12 @@ export default function MasterKategori() {
       setEditingCategory(category);
       setFormData({
         nama_kategori: category.nama_kategori,
-        deskripsi: category.deskripsi || ''
+        deskripsi: category.deskripsi || '',
+        parent_id: category.parent_id || ''
       });
     } else {
       setEditingCategory(null);
-      setFormData({ nama_kategori: '', deskripsi: '' });
+      setFormData({ nama_kategori: '', deskripsi: '', parent_id: '' });
     }
     setFormError(null);
     setIsModalOpen(true);
@@ -92,13 +94,16 @@ export default function MasterKategori() {
     setFormError(null);
 
     try {
+      const payload = {
+        ...formData,
+        parent_id: formData.parent_id || null,
+        updated_at: new Date().toISOString()
+      };
+
       if (editingCategory) {
         const { error } = await supabase
           .from('categories')
-          .update({
-            ...formData,
-            updated_at: new Date().toISOString()
-          })
+          .update(payload)
           .eq('id', editingCategory.id);
           
         if (error) throw error;
@@ -106,7 +111,11 @@ export default function MasterKategori() {
       } else {
         const { error } = await supabase
           .from('categories')
-          .insert([{ ...formData }]);
+          .insert([{
+            nama_kategori: formData.nama_kategori,
+            deskripsi: formData.deskripsi,
+            parent_id: formData.parent_id || null,
+          }]);
           
         if (error) throw error;
         showToast('Kategori berhasil ditambahkan', 'success');
@@ -188,6 +197,7 @@ export default function MasterKategori() {
             <thead>
               <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                 <th className="px-6 py-4">Nama Kategori</th>
+                <th className="px-6 py-4">Sub Dari</th>
                 <th className="px-6 py-4">Deskripsi</th>
                 <th className="px-6 py-4">Tgl Dibuat</th>
                 {isAdmin && <th className="px-6 py-4 text-right">Aksi</th>}
@@ -196,14 +206,14 @@ export default function MasterKategori() {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 4 : 3} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={isAdmin ? 5 : 4} className="px-6 py-12 text-center text-gray-500">
                     <Loader2 className="animate-spin mx-auto mb-2 text-orange-500" size={24} />
                     <p>Memuat data...</p>
                   </td>
                 </tr>
               ) : categories.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 4 : 3} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={isAdmin ? 5 : 4} className="px-6 py-12 text-center text-gray-500">
                     <AlertCircle className="mx-auto mb-2 text-gray-400" size={24} />
                     <p>Tidak ada data kategori ditemukan.</p>
                   </td>
@@ -213,6 +223,11 @@ export default function MasterKategori() {
                   <tr key={category.id} className="hover:bg-orange-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="text-sm font-semibold text-gray-900">{category.nama_kategori}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600">
+                        {category.parent_id ? categories.find(c => c.id === category.parent_id)?.nama_kategori || '-' : '-'}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600 truncate max-w-sm">{category.deskripsi || '-'}</div>
@@ -291,6 +306,21 @@ export default function MasterKategori() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
                     placeholder="Misal: Elektronik, Furniture, Kendaraan..."
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Sub Dari (Opsional)</label>
+                  <select
+                    value={formData.parent_id}
+                    onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
+                  >
+                    <option value="">Pilih Kategori Utama...</option>
+                    {categories
+                      .filter(cat => !editingCategory || cat.id !== editingCategory.id) // Prevent self-referencing
+                      .map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.nama_kategori}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Deskripsi</label>

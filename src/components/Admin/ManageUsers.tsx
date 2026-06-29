@@ -28,7 +28,7 @@ export default function ManageUsers() {
     email: '',
     password: '',
     full_name: '',
-    role: 'user' as 'admin' | 'user' | 'auditor'
+    role: 'user' as 'admin' | 'user' | 'auditor' | 'spv' | 'direktur'
   });
 
   // Profile Edit State
@@ -465,12 +465,14 @@ export default function ManageUsers() {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Role</label>
                 <select
                   value={newUserForm.role}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'admin' | 'user' | 'auditor' })}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'admin' | 'user' | 'auditor' | 'spv' | 'direktur' })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                 >
                   <option value="user">User (View Only)</option>
                   <option value="admin">Admin (Full Access)</option>
                   <option value="auditor">Auditor (Audit Only)</option>
+                  <option value="spv">SPV (Level 1 Approval)</option>
+                  <option value="direktur">Direktur (Level 2 Approval)</option>
                 </select>
               </div>
 

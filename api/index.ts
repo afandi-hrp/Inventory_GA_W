@@ -127,6 +127,52 @@ app.delete('/api/admin/delete-user/:userId', checkAdmin, async (req, res) => {
   res.json({ message: 'User deleted successfully' });
 });
 
+// Middleware to check if user is authenticated (any role)
+const checkAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Supabase Admin not initialized' });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'No authorization header' });
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    // Attach user to request for further use if needed
+    (req as any).user = user;
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error during auth check' });
+  }
+};
+
+// API Route to delete an item bypassing RLS (used for disposal approval)
+app.delete('/api/inventory/delete-item/:itemId', checkAuth, async (req, res) => {
+  const { itemId } = req.params;
+  
+  if (!itemId || itemId === 'undefined') {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+
+  const { data, error } = await supabaseAdmin!.from('items').delete().eq('id', itemId).select('*');
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  if (!data || data.length === 0) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+
+  res.json({ message: 'Item deleted successfully', data });
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const { createServer: createViteServer } = await import('vite');

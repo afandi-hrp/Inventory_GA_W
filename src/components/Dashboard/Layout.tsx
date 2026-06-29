@@ -33,15 +33,15 @@ export default function Layout({ children, setHistorySearch }: LayoutProps) {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'barang', label: 'Master Barang', icon: <Package size={20} /> },
-    { id: 'kategori', label: 'Master Kategori', icon: <Layers size={20} /> },
-    { id: 'lokasi', label: 'Master Lokasi', icon: <MapPin size={20} /> },
+    { id: 'barang', label: 'Item Master', icon: <Package size={20} /> },
+    { id: 'kategori', label: 'Category Master', icon: <Layers size={20} /> },
+    { id: 'lokasi', label: 'Location Master', icon: <MapPin size={20} /> },
     { id: 'take-item-history', label: 'Take Item History', icon: <History size={20} /> },
-    { id: 'log-item-change', label: 'Log Item Change', icon: <ClipboardList size={20} /> },
-    { id: 'stock-out-history', label: 'Riwayat Stock Keluar', icon: <Archive size={20} /> },
-    { id: 'manage-users', label: 'Manage User', icon: <Users size={20} /> },
+    { id: 'log-item-change', label: 'Item Change Logs', icon: <ClipboardList size={20} /> },
+    { id: 'stock-out-history', label: 'Stock Out History', icon: <Archive size={20} /> },
+    { id: 'manage-users', label: 'Manage Users', icon: <Users size={20} /> },
     ...(profile?.role === 'admin' ? [
-      { id: 'login-settings', label: 'Pengaturan Login', icon: <Settings size={20} /> }
+      { id: 'login-settings', label: 'Login Settings', icon: <Settings size={20} /> }
     ] : []),
   ];
 

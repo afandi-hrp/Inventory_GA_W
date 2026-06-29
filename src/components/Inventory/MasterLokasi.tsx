@@ -34,6 +34,7 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
   const [formData, setFormData] = useState({
     kode_lokasi: '',
     nama_lokasi: '',
+    parent_kode_lokasi: '',
   });
 
   useEffect(() => {
@@ -79,12 +80,14 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
       setFormData({
         kode_lokasi: location.kode_lokasi,
         nama_lokasi: location.nama_lokasi,
+        parent_kode_lokasi: location.parent_kode_lokasi || '',
       });
     } else {
       setEditingLocation(null);
       setFormData({
         kode_lokasi: `LOC-${Math.floor(1000 + Math.random() * 9000)}`,
         nama_lokasi: '',
+        parent_kode_lokasi: '',
       });
     }
     setIsModalOpen(true);
@@ -95,8 +98,14 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
     setFormLoading(true);
 
     try {
+      const payload = {
+        kode_lokasi: formData.kode_lokasi,
+        nama_lokasi: formData.nama_lokasi,
+        parent_kode_lokasi: formData.parent_kode_lokasi || null,
+      };
+
       if (editingLocation) {
-        if (formData.nama_lokasi === editingLocation.nama_lokasi) {
+        if (formData.nama_lokasi === editingLocation.nama_lokasi && formData.parent_kode_lokasi === (editingLocation.parent_kode_lokasi || '')) {
           setIsModalOpen(false);
           setFormLoading(false);
           return;
@@ -104,14 +113,14 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
 
         const { error } = await supabase
           .from('master_lokasi')
-          .update({ nama_lokasi: formData.nama_lokasi })
+          .update(payload)
           .eq('kode_lokasi', editingLocation.kode_lokasi);
         if (error) throw error;
         showToast('Lokasi berhasil diperbarui', 'success');
       } else {
         const { error } = await supabase
           .from('master_lokasi')
-          .insert([formData]);
+          .insert([payload]);
         if (error) throw error;
         showToast('Lokasi berhasil ditambahkan', 'success');
       }
@@ -187,20 +196,21 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
               <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                 <th className="px-6 py-4">Kode Lokasi</th>
                 <th className="px-6 py-4">Nama Lokasi</th>
+                <th className="px-6 py-4">Sub Dari</th>
                 <th className="px-6 py-4 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-10 text-center">
+                  <td colSpan={4} className="px-6 py-10 text-center">
                     <Loader2 className="animate-spin text-blue-600 mx-auto mb-2" size={32} />
                     <p className="text-gray-500">Memuat data...</p>
                   </td>
                 </tr>
               ) : locations.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-10 text-center">
+                  <td colSpan={4} className="px-6 py-10 text-center">
                     <MapPin className="text-gray-300 mx-auto mb-2" size={48} />
                     <p className="text-gray-500">Tidak ada lokasi ditemukan</p>
                   </td>
@@ -216,6 +226,11 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-gray-900 font-medium">{loc.nama_lokasi}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-600">
+                        {loc.parent_kode_lokasi ? locations.find(l => l.kode_lokasi === loc.parent_kode_lokasi)?.nama_lokasi || loc.parent_kode_lokasi : '-'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end space-x-2">
@@ -366,6 +381,24 @@ export default function MasterLokasi({ setHistorySearch }: MasterLokasiProps) {
                   placeholder="Contoh: Gudang A, Rak 01, dsb."
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-sm"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center">
+                  <MapPin size={14} className="mr-1" /> Sub Dari (Opsional)
+                </label>
+                <select
+                  value={formData.parent_kode_lokasi}
+                  onChange={(e) => setFormData({ ...formData, parent_kode_lokasi: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-sm bg-white"
+                >
+                  <option value="">Pilih Lokasi Utama...</option>
+                  {locations
+                    .filter(loc => !editingLocation || loc.kode_lokasi !== editingLocation.kode_lokasi)
+                    .map((loc) => (
+                    <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="pt-4 flex items-center space-x-3">

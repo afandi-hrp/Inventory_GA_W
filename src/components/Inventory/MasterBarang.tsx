@@ -7,12 +7,13 @@ import {
   Package, Image as ImageIcon, Upload, Download, X, Loader2, AlertCircle,
   FileSpreadsheet, CheckSquare, Square, MoreHorizontal,
   ArrowUpDown, ChevronUp, ChevronDown, Info, Calendar, MapPin, Hash,
-  LogOut, History, ClipboardList, Archive, XCircle, Camera
+  LogOut, History, ClipboardList, Archive, XCircle, Camera, AlertTriangle, FileWarning
 } from 'lucide-react';
 import { Item } from '../../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useToast } from '../UI/Toast';
+import { DisposalApprovalModal } from './DisposalApprovalModal';
 import * as XLSX from 'xlsx';
 
 function cn(...inputs: ClassValue[]) {
@@ -47,6 +48,10 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
   const [isTakeItemModalOpen, setIsTakeItemModalOpen] = useState(false);
   const [isStockOutModalOpen, setIsStockOutModalOpen] = useState(false);
   const [isBulkStockOutModalOpen, setIsBulkStockOutModalOpen] = useState(false);
+  const [isDisposalModalOpen, setIsDisposalModalOpen] = useState(false);
+  const [isApprovalListModalOpen, setIsApprovalListModalOpen] = useState(false);
+  const [disposalData, setDisposalData] = useState({ keterangan: '', metode_pemusnahan: '' });
+  const [isSubmittingDisposal, setIsSubmittingDisposal] = useState(false);
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<Item | null>(null);
   const [selectedItemForTake, setSelectedItemForTake] = useState<Item | null>(null);
   const [selectedItemForStockOut, setSelectedItemForStockOut] = useState<Item | null>(null);
@@ -76,9 +81,17 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     kelengkapan_garansi: false,
     kelengkapan_sertifikat: false,
     kelengkapan_manual: false,
+    kondisi_barang: '' as 'BAIK' | 'CUKUP BAIK' | 'RUSAK' | '',
+    dokumen_garansi_url: '' as string | null,
+    dokumen_sertifikat_url: '' as string | null,
+    dokumen_manual_url: '' as string | null,
     note_audit: '',
     foto_urls: [] as string[],
   });
+
+  const [docGaransiFile, setDocGaransiFile] = useState<File | null>(null);
+  const [docSertifikatFile, setDocSertifikatFile] = useState<File | null>(null);
+  const [docManualFile, setDocManualFile] = useState<File | null>(null);
 
   const [takeItemData, setTakeItemData] = useState({
     jumlah: 1,
@@ -92,6 +105,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
   const [categories, setCategories] = useState<any[]>([]);
   const [filterKategori, setFilterKategori] = useState('');
+  const [filterPemusnahan, setFilterPemusnahan] = useState(false);
 
   const [bulkEditData, setBulkEditData] = useState({
     kode_lokasi: '',
@@ -156,7 +170,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     }
     fetchItems();
     fetchCategories();
-  }, [page, debouncedSearch, filterLokasi, filterKategori, itemsPerPage, profile, sortColumn, sortOrder]);
+  }, [page, debouncedSearch, filterLokasi, filterKategori, filterPemusnahan, itemsPerPage, profile, sortColumn, sortOrder]);
 
   async function fetchCategories() {
     try {
@@ -175,13 +189,18 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
 
   async function fetchStatsAndLocations() {
     try {
-      const [locRes, itemsRes] = await Promise.all([
+      const [locRes, itemsRes, catRes] = await Promise.all([
         supabase.from('master_lokasi').select('*').order('nama_lokasi'),
-        supabase.from('items').select('kategori_id, kode_lokasi, jumlah_barang, master_lokasi(nama_lokasi), categories(nama_kategori)')
+        supabase.from('items').select('kategori_id, kode_lokasi, jumlah_barang, master_lokasi(nama_lokasi)'),
+        supabase.from('categories').select('*')
       ]);
       
       if (locRes.error) throw locRes.error;
       if (itemsRes.error) throw itemsRes.error;
+      if (catRes.error) throw catRes.error;
+      
+      const allCats = catRes.data || [];
+      const catMapById = new Map(allCats.map(c => [c.id, c]));
       
       if (locRes.data) {
         setAvailableLocations(locRes.data);
@@ -197,22 +216,44 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         }> = {};
 
         itemsRes.data.forEach(item => {
-          const catId = item.kategori_id || 'unassigned';
-          const catName = (item as any).categories?.nama_kategori || 'Tanpa Kategori';
+          const itemCatId = item.kategori_id;
+          let topCatId = 'unassigned';
+          let topCatName = 'Tanpa Kategori';
+
+          if (itemCatId) {
+            const cat = catMapById.get(itemCatId);
+            if (cat) {
+              if (cat.parent_id) {
+                // Roll up to parent
+                const parentCat = catMapById.get(cat.parent_id);
+                if (parentCat) {
+                  topCatId = parentCat.id;
+                  topCatName = parentCat.nama_kategori;
+                } else {
+                  topCatId = cat.id;
+                  topCatName = cat.nama_kategori;
+                }
+              } else {
+                topCatId = cat.id;
+                topCatName = cat.nama_kategori;
+              }
+            }
+          }
+
           const locKode = item.kode_lokasi || 'unassigned';
           const locName = (item as any).master_lokasi?.nama_lokasi || locKode || 'Tanpa Lokasi';
           
-          if (!catMap[catId]) {
-            catMap[catId] = { id: catId, name: catName, count: 0, stock: 0, locs: {} };
+          if (!catMap[topCatId]) {
+            catMap[topCatId] = { id: topCatId, name: topCatName, count: 0, stock: 0, locs: {} };
           }
-          catMap[catId].count += 1;
-          catMap[catId].stock += (item.jumlah_barang || 0);
+          catMap[topCatId].count += 1;
+          catMap[topCatId].stock += (item.jumlah_barang || 0);
 
-          if (!catMap[catId].locs[locKode]) {
-            catMap[catId].locs[locKode] = { kode: locKode, name: locName, count: 0, stock: 0 };
+          if (!catMap[topCatId].locs[locKode]) {
+            catMap[topCatId].locs[locKode] = { kode: locKode, name: locName, count: 0, stock: 0 };
           }
-          catMap[catId].locs[locKode].count += 1;
-          catMap[catId].locs[locKode].stock += (item.jumlah_barang || 0);
+          catMap[topCatId].locs[locKode].count += 1;
+          catMap[topCatId].locs[locKode].stock += (item.jumlah_barang || 0);
         });
         
         const catArray = Object.values(catMap).map(cat => ({
@@ -254,7 +295,16 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       }
 
       if (filterKategori) {
-        query = query.eq('kategori_id', filterKategori);
+        const subCats = categories.filter(c => c.parent_id === filterKategori).map(c => c.id);
+        if (subCats.length > 0) {
+          query = query.in('kategori_id', [filterKategori, ...subCats]);
+        } else {
+          query = query.eq('kategori_id', filterKategori);
+        }
+      }
+
+      if (filterPemusnahan) {
+        query = query.in('kondisi_barang', ['RUSAK', 'CUKUP BAIK']);
       }
 
       const from = (page - 1) * itemsPerPage;
@@ -307,6 +357,60 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
     setSelectedItemForStockOut(item);
     setStockOutData({ alasan: '', lokasi_keluar: '' });
     setIsStockOutModalOpen(true);
+  };
+
+  const submitDisposalRequest = async () => {
+    if (selectedItems.length === 0) return;
+    setIsSubmittingDisposal(true);
+    try {
+      const userRes = await supabase.auth.getUser();
+      const userId = userRes.data.user?.id;
+      let diajukan_oleh = profile?.full_name || 'Unknown';
+
+      const reqRes = await supabase.from('disposal_requests').insert({
+        nomor_pengajuan: `PM-${Date.now()}`,
+        diajukan_oleh: diajukan_oleh,
+        user_id: userId,
+        jumlah: selectedItems.length,
+        status: 'PENDING_L1',
+        keterangan: disposalData.keterangan || null,
+        alasan: disposalData.keterangan || '-',
+        metode_pemusnahan: disposalData.metode_pemusnahan || null
+      }).select('id').single();
+
+      if (reqRes.error) throw reqRes.error;
+
+      const requestId = reqRes.data.id;
+
+      const selectedItemDocs = items.filter(i => selectedItems.includes(i.id));
+      const insertItems = selectedItemDocs.map(item => ({
+        request_id: requestId,
+        item_id: item.id,
+        kode_barang: item.kode_barang,
+        nama_barang: item.nama_barang,
+        jumlah_barang: item.jumlah_barang,
+        kode_lokasi: item.kode_lokasi,
+        kondisi_barang: item.kondisi_barang,
+        foto_urls: item.foto_urls || [],
+        status_item: 'PENDING'
+      }));
+
+      const itemRes = await supabase.from('disposal_request_items').insert(insertItems);
+      if (itemRes.error) throw itemRes.error;
+
+      showToast('Pengajuan pemusnahan berhasil dibuat!', 'success');
+      setIsDisposalModalOpen(false);
+      setDisposalData({ keterangan: '' });
+      setSelectedItems([]);
+      setFilterPemusnahan(false);
+      // We don't deduct stock here, because it waits for L2 approval.
+      fetchItems();
+    } catch (err: any) {
+      console.error(err);
+      showToast('Gagal mengajukan pemusnahan: ' + err.message, 'error');
+    } finally {
+      setIsSubmittingDisposal(false);
+    }
   };
 
   const confirmTakeItem = async () => {
@@ -466,10 +570,17 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         kelengkapan_garansi: item.kelengkapan_garansi || false,
         kelengkapan_sertifikat: item.kelengkapan_sertifikat || false,
         kelengkapan_manual: item.kelengkapan_manual || false,
+        kondisi_barang: item.kondisi_barang || '',
+        dokumen_garansi_url: item.dokumen_garansi_url || null,
+        dokumen_sertifikat_url: item.dokumen_sertifikat_url || null,
+        dokumen_manual_url: item.dokumen_manual_url || null,
         note_audit: item.note_audit || '',
         foto_urls: item.foto_urls || [],
       });
       setPreviewUrls(item.foto_urls || []);
+      setDocGaransiFile(null);
+      setDocSertifikatFile(null);
+      setDocManualFile(null);
     } else {
       setEditingItem(null);
       const nextKode = await generateNextKodeBarang();
@@ -483,10 +594,17 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         kelengkapan_garansi: false,
         kelengkapan_sertifikat: false,
         kelengkapan_manual: false,
+        kondisi_barang: '',
+        dokumen_garansi_url: null,
+        dokumen_sertifikat_url: null,
+        dokumen_manual_url: null,
         note_audit: '',
         foto_urls: [],
       });
       setPreviewUrls([]);
+      setDocGaransiFile(null);
+      setDocSertifikatFile(null);
+      setDocManualFile(null);
     }
     setSelectedFiles([]);
     setFormError(null);
@@ -585,6 +703,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         'Jumlah': item.jumlah_barang,
         'Lokasi': (item as any).master_lokasi?.nama_lokasi || '-',
         'Deskripsi': item.deskripsi || '-',
+        'Kondisi Barang': item.kondisi_barang || '-',
         'Kelengkapan Garansi': item.kelengkapan_garansi ? 'Ya' : 'Tidak',
         'Kelengkapan Sertifikat': item.kelengkapan_sertifikat ? 'Ya' : 'Tidak',
         'Kelengkapan Manual Book': item.kelengkapan_manual ? 'Ya' : 'Tidak',
@@ -812,6 +931,38 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       }
       
       let finalFotoUrls = [...formData.foto_urls];
+      let finalDocGaransiUrl = formData.dokumen_garansi_url;
+      let finalDocSertifikatUrl = formData.dokumen_sertifikat_url;
+      let finalDocManualUrl = formData.dokumen_manual_url;
+
+      // Helper function to upload document
+      const uploadDocument = async (file: File) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `doc-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('item-documents')
+          .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('item-documents')
+          .getPublicUrl(fileName);
+        
+        return publicUrl;
+      };
+
+      if (profile?.role === 'admin') {
+        if (docGaransiFile) {
+          finalDocGaransiUrl = await uploadDocument(docGaransiFile);
+        }
+        if (docSertifikatFile) {
+          finalDocSertifikatUrl = await uploadDocument(docSertifikatFile);
+        }
+        if (docManualFile) {
+          finalDocManualUrl = await uploadDocument(docManualFile);
+        }
+      }
 
       // Upload new files (only if admin)
       if (selectedFiles.length > 0 && profile?.role === 'admin') {
@@ -841,6 +992,10 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
         ...formData,
         kategori_id: formData.kategori_id || null,
         kode_lokasi: formData.kode_lokasi || null,
+        kondisi_barang: formData.kondisi_barang || null,
+        dokumen_garansi_url: finalDocGaransiUrl,
+        dokumen_sertifikat_url: finalDocSertifikatUrl,
+        dokumen_manual_url: finalDocManualUrl,
         foto_urls: finalFotoUrls,
         updated_at: new Date().toISOString(),
       };
@@ -865,8 +1020,15 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             formData.kelengkapan_garansi !== (editingItem.kelengkapan_garansi || false) ||
             formData.kelengkapan_sertifikat !== (editingItem.kelengkapan_sertifikat || false) ||
             formData.kelengkapan_manual !== (editingItem.kelengkapan_manual || false) ||
+            formData.kondisi_barang !== (editingItem.kondisi_barang || '') ||
             formData.note_audit !== (editingItem.note_audit || '') ||
             selectedFiles.length > 0 ||
+            docGaransiFile !== null ||
+            docSertifikatFile !== null ||
+            docManualFile !== null ||
+            formData.dokumen_garansi_url !== (editingItem.dokumen_garansi_url || null) ||
+            formData.dokumen_sertifikat_url !== (editingItem.dokumen_sertifikat_url || null) ||
+            formData.dokumen_manual_url !== (editingItem.dokumen_manual_url || null) ||
             JSON.stringify(formData.foto_urls) !== JSON.stringify(editingItem.foto_urls || []));
 
         if (!isChanged) {
@@ -1007,7 +1169,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
       </div>
 
       {/* Bulk Actions Bar */}
-      {selectedItems.length > 0 && profile?.role === 'admin' && (
+      {selectedItems.length > 0 && profile?.role === 'admin' && !filterPemusnahan && (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
           <div className="flex items-center space-x-3">
             <span className="text-blue-700 font-medium">{selectedItems.length} barang terpilih</span>
@@ -1062,31 +1224,81 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
           </div>
           
           {selectedTopCategory && (
-            <div className="animate-in slide-in-from-top-4 fade-in duration-300">
-              <div className="flex items-center space-x-2 mb-3">
-                <MapPin className="text-blue-600" size={18} />
-                <h3 className="text-sm font-semibold text-gray-800">Pilih Lokasi untuk Kategori {categoryStats.find(c => c.id === selectedTopCategory)?.name}</h3>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                {categoryStats.find(c => c.id === selectedTopCategory)?.locations.map((loc, idx) => (
-                  <div 
-                    key={idx}
-                    className="bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex items-center space-x-3 group"
-                    onClick={() => {
-                      setFilterKategori(selectedTopCategory === 'unassigned' ? '' : selectedTopCategory);
-                      setFilterLokasi(loc.kode === 'unassigned' ? '' : loc.kode);
-                      setSelectedTopCategory(null); // menciut / hide
-                    }}
-                  >
-                    <div className="p-1.5 bg-gray-50 group-hover:bg-blue-100 rounded-lg text-gray-400 group-hover:text-blue-600 transition-colors">
-                      <MapPin size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-800">{loc.name}</h4>
-                      <p className="text-[10px] text-gray-500">{loc.count} Jenis • {loc.stock} Stok</p>
-                    </div>
+            <div className="animate-in slide-in-from-top-4 fade-in duration-300 space-y-4">
+              
+              {/* Sub-Kategori Cards */}
+              {categories.filter(c => c.parent_id === selectedTopCategory).length > 0 && (
+                <div>
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Package className="text-orange-500" size={18} />
+                    <h3 className="text-sm font-semibold text-gray-800">Sub-Kategori {categoryStats.find(c => c.id === selectedTopCategory)?.name}</h3>
                   </div>
-                ))}
+                  <div className="flex flex-wrap gap-3">
+                    {/* Option to select the "Semua" parent category */}
+                    <div 
+                      className="bg-white hover:bg-orange-50 border border-gray-200 hover:border-orange-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex items-center space-x-3 group"
+                      onClick={() => {
+                        setFilterKategori(selectedTopCategory === 'unassigned' ? '' : selectedTopCategory);
+                        setFilterLokasi('');
+                        setSelectedTopCategory(null);
+                      }}
+                    >
+                      <div className="p-1.5 bg-gray-50 group-hover:bg-orange-100 rounded-lg text-gray-400 group-hover:text-orange-600 transition-colors">
+                        <Package size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800">Semua {categoryStats.find(c => c.id === selectedTopCategory)?.name}</h4>
+                      </div>
+                    </div>
+                    {categories.filter(c => c.parent_id === selectedTopCategory).map((subCat) => (
+                      <div 
+                        key={subCat.id}
+                        className="bg-white hover:bg-orange-50 border border-gray-200 hover:border-orange-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex items-center space-x-3 group"
+                        onClick={() => {
+                          setFilterKategori(subCat.id);
+                          setFilterLokasi('');
+                          setSelectedTopCategory(null);
+                        }}
+                      >
+                        <div className="p-1.5 bg-gray-50 group-hover:bg-orange-100 rounded-lg text-gray-400 group-hover:text-orange-600 transition-colors">
+                          <Package size={16} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-800">{subCat.nama_kategori}</h4>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lokasi Cards */}
+              <div>
+                <div className="flex items-center space-x-2 mb-3">
+                  <MapPin className="text-blue-600" size={18} />
+                  <h3 className="text-sm font-semibold text-gray-800">Pilih Lokasi untuk Kategori {categoryStats.find(c => c.id === selectedTopCategory)?.name}</h3>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {categoryStats.find(c => c.id === selectedTopCategory)?.locations.map((loc, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex items-center space-x-3 group"
+                      onClick={() => {
+                        setFilterKategori(selectedTopCategory === 'unassigned' ? '' : selectedTopCategory);
+                        setFilterLokasi(loc.kode === 'unassigned' ? '' : loc.kode);
+                        setSelectedTopCategory(null); // menciut / hide
+                      }}
+                    >
+                      <div className="p-1.5 bg-gray-50 group-hover:bg-blue-100 rounded-lg text-gray-400 group-hover:text-blue-600 transition-colors">
+                        <MapPin size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800">{loc.name}</h4>
+                        <p className="text-[10px] text-gray-500">{loc.count} Jenis • {loc.stock} Stok</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -1126,8 +1338,13 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                 className="w-full pl-3 pr-10 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm appearance-none bg-white font-medium"
               >
                 <option value="">Semua Kategori</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.nama_kategori}</option>
+                {categories.filter(c => !c.parent_id).map((cat) => (
+                  <optgroup key={cat.id} label={cat.nama_kategori}>
+                    <option value={cat.id}>{cat.nama_kategori} (Utama)</option>
+                    {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
+                      <option key={sub.id} value={sub.id}>-- {sub.nama_kategori}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               {filterKategori && (
@@ -1152,8 +1369,13 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                 className="w-full pl-3 pr-10 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-blue-50 text-blue-800 text-sm appearance-none font-medium text-center"
               >
                 <option value="">-- Pilih Lokasi Kategori --</option>
-                {availableLocations.map((loc) => (
-                  <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                {availableLocations.filter(loc => !loc.parent_kode_lokasi).map((loc) => (
+                  <optgroup key={loc.kode_lokasi} label={loc.nama_lokasi}>
+                    <option value={loc.kode_lokasi}>{loc.nama_lokasi} (Utama)</option>
+                    {availableLocations.filter(sub => sub.parent_kode_lokasi === loc.kode_lokasi).map(sub => (
+                      <option key={sub.kode_lokasi} value={sub.kode_lokasi}>-- {sub.nama_lokasi}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -1177,6 +1399,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             setSearch('');
             setFilterLokasi('');
             setFilterKategori('');
+            setFilterPemusnahan(false);
             setPage(1);
           }}
           className="flex items-center justify-center space-x-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-500/20 backdrop-blur-md rounded-lg transition-all text-sm font-medium whitespace-nowrap shadow-sm"
@@ -1184,6 +1407,53 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
           <XCircle size={16} />
           <span>Reset Pencarian</span>
         </button>
+      </div>
+
+      {/* Pemusnahan Filter Toggle & Actions */}
+      <div className="flex flex-col md:flex-row items-center justify-between bg-white/40 backdrop-blur-sm p-3 rounded-2xl border border-white/60 shadow-sm gap-4">
+        <div className="flex items-center space-x-3">
+          {profile?.role !== 'auditor' && (
+            <button
+              onClick={() => {
+                setFilterPemusnahan(!filterPemusnahan);
+                setPage(1);
+              }}
+              className={cn(
+                "flex items-center space-x-2 px-4 py-2 rounded-xl transition-all text-sm font-semibold border shadow-sm",
+                filterPemusnahan 
+                  ? "bg-red-500 text-white border-red-600 shadow-red-500/20" 
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              )}
+            >
+              <AlertTriangle size={18} />
+              <span>List Barang Pemusnahan (Rusak/Cukup Baik)</span>
+            </button>
+          )}
+
+          {['admin', 'spv', 'direktur'].includes(profile?.role || '') && (
+            <button
+              onClick={() => setIsApprovalListModalOpen(true)}
+              className="flex items-center space-x-2 px-4 py-2 rounded-xl transition-all text-sm font-semibold border shadow-sm bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+            >
+              <ClipboardList size={18} />
+              <span>Persetujuan Pemusnahan</span>
+            </button>
+          )}
+        </div>
+        
+        {selectedItems.length > 0 && filterPemusnahan && (
+          <div className="flex items-center animate-in slide-in-from-right-4 fade-in">
+            <button
+              onClick={() => {
+                setIsDisposalModalOpen(true);
+              }}
+              className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white rounded-xl shadow-lg shadow-red-500/30 transition-all font-semibold"
+            >
+              <FileWarning size={18} />
+              <span>Ajukan Pemusnahan ({selectedItems.length} Barang)</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Top Scrollbar */}
@@ -1252,6 +1522,7 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                   </div>
                 </th>
                 <th className="px-6 py-4">Kategori</th>
+                <th className="px-6 py-4">Kondisi</th>
                 <th className="px-6 py-4">Kelengkapan Dokumen</th>
                 <th 
                   className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors group"
@@ -1273,14 +1544,14 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-12 text-center">
+                  <td colSpan={12} className="px-6 py-12 text-center">
                     <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                     <p className="text-gray-500">Memuat data...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-12 text-center">
+                  <td colSpan={12} className="px-6 py-12 text-center">
                     <Package className="mx-auto text-gray-300 mb-2" size={48} />
                     <p className="text-gray-500">Tidak ada barang ditemukan</p>
                   </td>
@@ -1342,6 +1613,20 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-100">
                         {(item as any).categories?.nama_kategori || 'Tanpa Kategori'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {item.kondisi_barang ? (
+                        <span className={cn(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+                          item.kondisi_barang === 'BAIK' ? "bg-green-50 text-green-700 border-green-200" :
+                          item.kondisi_barang === 'CUKUP BAIK' ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                          item.kondisi_barang === 'RUSAK' ? "bg-red-50 text-red-700 border-red-200" : ""
+                        )}>
+                          {item.kondisi_barang}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
@@ -1569,8 +1854,13 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white disabled:opacity-60 disabled:bg-gray-50"
                       >
                         <option value="">Tanpa Kategori</option>
-                        {categories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>{cat.nama_kategori}</option>
+                        {categories.filter(c => !c.parent_id).map((cat) => (
+                          <optgroup key={cat.id} label={cat.nama_kategori}>
+                            <option value={cat.id}>{cat.nama_kategori} (Utama)</option>
+                            {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
+                              <option key={sub.id} value={sub.id}>-- {sub.nama_kategori}</option>
+                            ))}
+                          </optgroup>
                         ))}
                       </select>
                     </div>
@@ -1585,44 +1875,146 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white disabled:opacity-60 disabled:bg-gray-50"
                     >
                       <option value="">Pilih Lokasi</option>
-                      {availableLocations.map((loc) => (
-                        <option key={loc.kode_lokasi} value={loc.kode_lokasi}>{loc.nama_lokasi}</option>
+                      {availableLocations.filter(loc => !loc.parent_kode_lokasi).map((loc) => (
+                        <optgroup key={loc.kode_lokasi} label={loc.nama_lokasi}>
+                          <option value={loc.kode_lokasi}>{loc.nama_lokasi} (Utama)</option>
+                          {availableLocations.filter(sub => sub.parent_kode_lokasi === loc.kode_lokasi).map(sub => (
+                            <option key={sub.kode_lokasi} value={sub.kode_lokasi}>-- {sub.nama_lokasi}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Kondisi Barang</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <label className={`flex items-center justify-center p-2 border rounded-lg cursor-pointer transition-colors ${formData.kondisi_barang === 'BAIK' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        <input
+                          type="radio"
+                          name="kondisi_barang"
+                          value="BAIK"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kondisi_barang === 'BAIK'}
+                          onChange={(e) => setFormData({ ...formData, kondisi_barang: e.target.value as 'BAIK' | 'CUKUP BAIK' | 'RUSAK' })}
+                          className="sr-only"
+                        />
+                        <span className="text-sm font-medium">BAIK</span>
+                      </label>
+                      <label className={`flex items-center justify-center p-2 border rounded-lg cursor-pointer transition-colors ${formData.kondisi_barang === 'CUKUP BAIK' ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        <input
+                          type="radio"
+                          name="kondisi_barang"
+                          value="CUKUP BAIK"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kondisi_barang === 'CUKUP BAIK'}
+                          onChange={(e) => setFormData({ ...formData, kondisi_barang: e.target.value as 'BAIK' | 'CUKUP BAIK' | 'RUSAK' })}
+                          className="sr-only"
+                        />
+                        <span className="text-sm font-medium">CUKUP BAIK</span>
+                      </label>
+                      <label className={`flex items-center justify-center p-2 border rounded-lg cursor-pointer transition-colors ${formData.kondisi_barang === 'RUSAK' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        <input
+                          type="radio"
+                          name="kondisi_barang"
+                          value="RUSAK"
+                          disabled={profile?.role === 'auditor'}
+                          checked={formData.kondisi_barang === 'RUSAK'}
+                          onChange={(e) => setFormData({ ...formData, kondisi_barang: e.target.value as 'BAIK' | 'CUKUP BAIK' | 'RUSAK' })}
+                          className="sr-only"
+                        />
+                        <span className="text-sm font-medium">RUSAK</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Kelengkapan Dokumen</label>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          disabled={profile?.role === 'auditor'}
-                          checked={formData.kelengkapan_garansi}
-                          onChange={(e) => setFormData({ ...formData, kelengkapan_garansi: e.target.checked })}
-                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                        />
-                        <span className="text-sm text-gray-700">Garansi</span>
-                      </label>
-                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          disabled={profile?.role === 'auditor'}
-                          checked={formData.kelengkapan_sertifikat}
-                          onChange={(e) => setFormData({ ...formData, kelengkapan_sertifikat: e.target.checked })}
-                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                        />
-                        <span className="text-sm text-gray-700">Sertifikat</span>
-                      </label>
-                      <label className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          disabled={profile?.role === 'auditor'}
-                          checked={formData.kelengkapan_manual}
-                          onChange={(e) => setFormData({ ...formData, kelengkapan_manual: e.target.checked })}
-                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                        />
-                        <span className="text-sm text-gray-700">Manual Book</span>
-                      </label>
+                    <div className="space-y-3">
+                      {/* Garansi */}
+                      <div className="flex flex-col space-y-2 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={profile?.role === 'auditor'}
+                            checked={formData.kelengkapan_garansi}
+                            onChange={(e) => setFormData({ ...formData, kelengkapan_garansi: e.target.checked })}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Garansi</span>
+                        </label>
+                        {formData.kelengkapan_garansi && (
+                          <div className="pl-6 pt-1">
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              disabled={profile?.role === 'auditor'}
+                              onChange={(e) => setDocGaransiFile(e.target.files?.[0] || null)}
+                              className="text-xs text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              required={!formData.dokumen_garansi_url} // Required if no URL exists yet
+                            />
+                            {formData.dokumen_garansi_url && !docGaransiFile && (
+                              <p className="text-xs text-green-600 mt-1">Dokumen tersimpan. Upload baru untuk mengganti.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sertifikat */}
+                      <div className="flex flex-col space-y-2 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={profile?.role === 'auditor'}
+                            checked={formData.kelengkapan_sertifikat}
+                            onChange={(e) => setFormData({ ...formData, kelengkapan_sertifikat: e.target.checked })}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Sertifikat</span>
+                        </label>
+                        {formData.kelengkapan_sertifikat && (
+                          <div className="pl-6 pt-1">
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              disabled={profile?.role === 'auditor'}
+                              onChange={(e) => setDocSertifikatFile(e.target.files?.[0] || null)}
+                              className="text-xs text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              required={!formData.dokumen_sertifikat_url}
+                            />
+                            {formData.dokumen_sertifikat_url && !docSertifikatFile && (
+                              <p className="text-xs text-green-600 mt-1">Dokumen tersimpan. Upload baru untuk mengganti.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Manual Book */}
+                      <div className="flex flex-col space-y-2 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={profile?.role === 'auditor'}
+                            checked={formData.kelengkapan_manual}
+                            onChange={(e) => setFormData({ ...formData, kelengkapan_manual: e.target.checked })}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Manual Book</span>
+                        </label>
+                        {formData.kelengkapan_manual && (
+                          <div className="pl-6 pt-1">
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              disabled={profile?.role === 'auditor'}
+                              onChange={(e) => setDocManualFile(e.target.files?.[0] || null)}
+                              className="text-xs text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              required={!formData.dokumen_manual_url}
+                            />
+                            {formData.dokumen_manual_url && !docManualFile && (
+                              <p className="text-xs text-green-600 mt-1">Dokumen tersimpan. Upload baru untuk mengganti.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>
@@ -2060,6 +2452,24 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                   </div>
 
                   <div>
+                    <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Kondisi Barang</h4>
+                    <div className="mt-2">
+                      {selectedItemForDetail.kondisi_barang ? (
+                        <span className={cn(
+                          "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border",
+                          selectedItemForDetail.kondisi_barang === 'BAIK' ? "bg-green-50 text-green-700 border-green-200" :
+                          selectedItemForDetail.kondisi_barang === 'CUKUP BAIK' ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                          selectedItemForDetail.kondisi_barang === 'RUSAK' ? "bg-red-50 text-red-700 border-red-200" : ""
+                        )}>
+                          {selectedItemForDetail.kondisi_barang}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-500">-</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
                     <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Deskripsi</h4>
                     <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                       <p className="text-sm text-gray-600 leading-relaxed">
@@ -2071,15 +2481,56 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Kelengkapan Dokumen</h4>
                     <div className="flex flex-wrap gap-2 mt-2">
-                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_garansi ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                         Garansi: {selectedItemForDetail.kelengkapan_garansi ? 'Ada' : 'Tidak Ada'}
-                       </span>
-                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_sertifikat ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                         Sertifikat: {selectedItemForDetail.kelengkapan_sertifikat ? 'Ada' : 'Tidak Ada'}
-                       </span>
-                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${selectedItemForDetail.kelengkapan_manual ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                         Manual Book: {selectedItemForDetail.kelengkapan_manual ? 'Ada' : 'Tidak Ada'}
-                       </span>
+                       {selectedItemForDetail.kelengkapan_garansi ? (
+                         <div className="flex flex-col gap-1">
+                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
+                             Garansi: Ada
+                           </span>
+                           {selectedItemForDetail.dokumen_garansi_url && (
+                             <a href={selectedItemForDetail.dokumen_garansi_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline px-1">
+                               ⬇ Download Garansi
+                             </a>
+                           )}
+                         </div>
+                       ) : (
+                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-200 h-[22px]">
+                           Garansi: Tidak Ada
+                         </span>
+                       )}
+
+                       {selectedItemForDetail.kelengkapan_sertifikat ? (
+                         <div className="flex flex-col gap-1">
+                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
+                             Sertifikat: Ada
+                           </span>
+                           {selectedItemForDetail.dokumen_sertifikat_url && (
+                             <a href={selectedItemForDetail.dokumen_sertifikat_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline px-1">
+                               ⬇ Download Sertifikat
+                             </a>
+                           )}
+                         </div>
+                       ) : (
+                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-200 h-[22px]">
+                           Sertifikat: Tidak Ada
+                         </span>
+                       )}
+
+                       {selectedItemForDetail.kelengkapan_manual ? (
+                         <div className="flex flex-col gap-1">
+                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
+                             Manual Book: Ada
+                           </span>
+                           {selectedItemForDetail.dokumen_manual_url && (
+                             <a href={selectedItemForDetail.dokumen_manual_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline px-1">
+                               ⬇ Download Manual
+                             </a>
+                           )}
+                         </div>
+                       ) : (
+                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-gray-100 text-gray-500 border-gray-200 h-[22px]">
+                           Manual Book: Tidak Ada
+                         </span>
+                       )}
                     </div>
                   </div>
 
@@ -2277,8 +2728,13 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
                   >
                     <option value="">Pilih Lokasi</option>
-                    {availableLocations.map((loc) => (
-                      <option key={loc.kode_lokasi} value={loc.nama_lokasi}>{loc.nama_lokasi}</option>
+                    {availableLocations.filter(loc => !loc.parent_kode_lokasi).map((loc) => (
+                      <optgroup key={loc.kode_lokasi} label={loc.nama_lokasi}>
+                        <option value={loc.nama_lokasi}>{loc.nama_lokasi} (Utama)</option>
+                        {availableLocations.filter(sub => sub.parent_kode_lokasi === loc.kode_lokasi).map(sub => (
+                          <option key={sub.kode_lokasi} value={sub.nama_lokasi}>-- {sub.nama_lokasi}</option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>
@@ -2309,6 +2765,90 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
               >
                 {formLoading ? <Loader2 className="animate-spin" size={18} /> : null}
                 <span>Konfirmasi Pindah ke Riwayat</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disposal Request Modal */}
+      {isDisposalModalOpen && (
+        <div 
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => !isSubmittingDisposal && setIsDisposalModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90dvh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-red-50/50 shrink-0">
+              <div className="flex items-center space-x-2 text-red-700">
+                <FileWarning size={20} />
+                <h3 className="text-lg font-bold">Ajukan Pemusnahan</h3>
+              </div>
+              <button 
+                onClick={() => !isSubmittingDisposal && setIsDisposalModalOpen(false)} 
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                disabled={isSubmittingDisposal}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-hide">
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex items-start space-x-3">
+                <AlertTriangle className="text-red-600 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-bold text-red-800">Pengajuan Approval Pemusnahan</p>
+                  <p className="text-xs text-red-700 mt-1">
+                    Anda akan mengajukan <strong>{selectedItems.length} barang</strong> untuk dimusnahkan. 
+                    Barang ini tidak akan langsung dihapus, melainkan menunggu persetujuan (Level 1 dan Level 2).
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Metode Pemusnahan <span className="text-red-500">*</span></label>
+                  <select
+                    required
+                    value={disposalData.metode_pemusnahan}
+                    onChange={(e) => setDisposalData({ ...disposalData, metode_pemusnahan: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm bg-white"
+                  >
+                    <option value="">Pilih Metode Pemusnahan</option>
+                    <option value="Dibakar">Dibakar</option>
+                    <option value="Dihancurkan">Dihancurkan</option>
+                    <option value="Dijual ke penampungan barang bekas">Dijual ke penampungan barang bekas</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700">Keterangan / Alasan Pemusnahan <span className="text-red-500">*</span></label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={disposalData.keterangan}
+                    onChange={(e) => setDisposalData({ ...disposalData, keterangan: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm bg-white"
+                    placeholder="Tuliskan keterangan detail mengapa barang-barang ini diajukan untuk dimusnahkan..."
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50/50">
+              <button
+                onClick={() => setIsDisposalModalOpen(false)}
+                disabled={isSubmittingDisposal}
+                className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={submitDisposalRequest}
+                disabled={isSubmittingDisposal || !disposalData.keterangan.trim() || !disposalData.metode_pemusnahan}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 rounded-xl transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50"
+              >
+                {isSubmittingDisposal ? <Loader2 className="animate-spin" size={18} /> : <CheckSquare size={18} />}
+                <span>Ajukan Sekarang</span>
               </button>
             </div>
           </div>
@@ -2356,8 +2896,13 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
                   >
                     <option value="">Pilih Lokasi</option>
-                    {availableLocations.map((loc) => (
-                      <option key={loc.kode_lokasi} value={loc.nama_lokasi}>{loc.nama_lokasi}</option>
+                    {availableLocations.filter(loc => !loc.parent_kode_lokasi).map((loc) => (
+                      <optgroup key={loc.kode_lokasi} label={loc.nama_lokasi}>
+                        <option value={loc.nama_lokasi}>{loc.nama_lokasi} (Utama)</option>
+                        {availableLocations.filter(sub => sub.parent_kode_lokasi === loc.kode_lokasi).map(sub => (
+                          <option key={sub.kode_lokasi} value={sub.nama_lokasi}>-- {sub.nama_lokasi}</option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>
@@ -2448,6 +2993,14 @@ export default function MasterBarang({ setHistorySearch }: MasterBarangProps) {
           </div>
         </div>
       )}
+      <DisposalApprovalModal
+        isOpen={isApprovalListModalOpen}
+        onClose={() => {
+          setIsApprovalListModalOpen(false);
+          fetchItems();
+        }}
+        profile={profile}
+      />
     </div>
   );
 }
