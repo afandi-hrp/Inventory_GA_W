@@ -352,34 +352,6 @@ export function DisposalApprovalModal({ isOpen, onClose, profile }: DisposalAppr
           img.src = '/logo.png'; // Mengambil gambar asli dari folder public
         });
       };
-      
-      const drawStamp = (x: number, y: number, name: string, timestampStr: string, label: string = 'APPROVED', color: number[] = [82, 162, 129]) => {
-        const stampWidth = 55;
-        const stampHeight = 18;
-        const topY = y - 22;
-        
-        doc.setFillColor(color[0], color[1], color[2]);
-        doc.roundedRect(x, topY, stampWidth, stampHeight, 3, 3, 'F');
-        
-        doc.setDrawColor(255, 255, 255);
-        doc.setLineWidth(0.5);
-        doc.roundedRect(x + 1.5, topY + 1.5, stampWidth - 3, stampHeight - 3, 2, 2, 'S');
-
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(13);
-        doc.setFont('helvetica', 'normal');
-        doc.text(label, x + 4, topY + 9);
-        
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        const dateStr = new Date(timestampStr).toLocaleString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true });
-        const textStr = `${name} , ${dateStr}`;
-        doc.text(textStr, x + 4, topY + 14.5);
-        
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-      };
 
       let currentY = 20;
       const lineSpacing = 8;
@@ -530,19 +502,9 @@ export function DisposalApprovalModal({ isOpen, onClose, profile }: DisposalAppr
         currentY += 25;
         
         doc.text(`(${selectedRequest.diajukan_oleh})`, 14, currentY);
-        // "To submit" stamp for submitter
-        if (selectedRequest.created_at) {
-          drawStamp(9, currentY, selectedRequest.diajukan_oleh, selectedRequest.created_at, 'TO SUBMIT', [79, 70, 229]); // Indigo color
-        }
         
-        if (selectedRequest.approved_by_l1 && selectedRequest.tanggal_approved_l1) {
-          drawStamp(80, currentY, selectedRequest.approved_by_l1, selectedRequest.tanggal_approved_l1);
-        }
         doc.text(`(${selectedRequest.approved_by_l1 || '..................'})`, 85, currentY);
         
-        if (selectedRequest.approved_by_l2 && selectedRequest.tanggal_approved_l2) {
-          drawStamp(145, currentY, selectedRequest.approved_by_l2, selectedRequest.tanggal_approved_l2);
-        }
         doc.text(`(${selectedRequest.approved_by_l2 || '..................'})`, 150, currentY);
       }
       

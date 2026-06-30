@@ -267,7 +267,7 @@ export default function StockOutHistory({ setHistorySearch }: StockOutHistoryPro
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Riwayat Stock Keluar</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Stock Out History</h2>
           <p className="text-gray-500">Daftar barang yang telah dikeluarkan dari inventaris</p>
         </div>
         {profile?.role === 'admin' && (
